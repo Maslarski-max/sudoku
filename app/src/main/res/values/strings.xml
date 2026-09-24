@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sudoku</string>
+
+    <!-- Navigation -->
+    <string name="nav_leaderboard">Leaderboard</string>
+    <string name="nav_store">Store</string>
+    <string name="action_back">Back</string>
+
+    <!-- Home -->
+    <string name="home_title">Sudoku</string>
+    <string name="home_subtitle">Pick a grid size and difficulty</string>
+    <string name="home_grid_size">Grid size</string>
+    <string name="home_difficulty">Difficulty</string>
+    <string name="home_new_game">New game</string>
+    <string name="home_continue">Continue</string>
+    <string name="home_continue_description">%1$s · %2$s · %3$s</string>
+    <string name="home_generating">Generating a %1$d×%1$d puzzle…</string>
+    <string name="home_generating_hint">Large grids can take a few seconds.</string>
+    <string name="home_ad_free">100%% ad-free</string>
+    <string name="home_saved_games">Saved games</string>
+    <string name="home_no_saved_games">No games in progress</string>
+    <string name="home_replace_saved_title">Replace saved game?</string>
+    <string name="home_replace_saved_message">You already have a %1$d×%1$d game in progress. Starting a new one will discard it.</string>
+    <string name="home_replace_saved_confirm">Start new</string>
+
+    <string name="grid_size_label">%1$d×%1$d</string>
+    <string name="difficulty_easy">Easy</string>
+    <string name="difficulty_medium">Medium</string>
+    <string name="difficulty_hard">Hard</string>
+
+    <!-- Game -->
+    <string name="game_title">%1$d×%1$d · %2$s</string>
+    <string name="game_mistakes">Mistakes: %1$d</string>
+    <string name="game_moves">Moves: %1$d</string>
+    <string name="game_lives">Lives</string>
+    <string name="game_lives_unlimited">∞</string>
+    <string name="game_pause">Pause</string>
+    <string name="game_resume">Resume</string>
+    <string name="game_paused">Paused</string>
+    <string name="game_paused_message">Your timer is stopped. Tap resume to keep playing.</string>
+    <string name="game_undo">Undo</string>
+    <string name="game_redo">Redo</string>
+    <string name="game_erase">Erase</string>
+    <string name="game_notes">Notes</string>
+    <string name="game_notes_on">Notes on</string>
+    <string name="game_hint">Hint</string>
+    <string name="game_hint_title">Hint</string>
+    <string name="game_hint_apply">Apply</string>
+    <string name="game_hint_dismiss">Got it</string>
+    <string name="game_zoom_reset">Reset zoom</string>
+    <string name="game_quit">Quit to menu</string>
+
+    <!-- Hints -->
+    <string name="hint_naked_single">Row %1$d, column %2$d can only be %3$d: every other number already appears in its row, column, or box.</string>
+    <string name="hint_hidden_single_row">%3$d must go in row %1$d, column %2$d: it is the only cell in row %1$d where %3$d still fits.</string>
+    <string name="hint_hidden_single_column">%3$d must go in row %1$d, column %2$d: it is the only cell in column %2$d where %3$d still fits.</string>
+    <string name="hint_hidden_single_box">%3$d must go in row %1$d, column %2$d: it is the only cell in its box where %3$d still fits.</string>
+    <string name="hint_fix_mistake">Row %1$d, column %2$d contains %3$d, which is incorrect. The right value is %4$d.</string>
+    <string name="hint_reveal">No simple logical step is available right now. Row %1$d, column %2$d is %3$d.</string>
+    <string name="hint_none">The puzzle is already complete.</string>
+
+    <!-- Lives -->
+    <string name="lives_out_title">Out of lives</string>
+    <string name="lives_out_message">Each mistake costs one life. The game is paused until you have at least one life.</string>
+    <string name="lives_next_free">Next free life in %1$s</string>
+    <string name="lives_unlimited">Unlimited lives</string>
+    <string name="lives_go_to_store">Open store</string>
+    <string name="lives_remaining">%1$d lives</string>
+
+    <!-- Completion -->
+    <string name="complete_title">Puzzle solved!</string>
+    <string name="complete_time">Time: %1$s</string>
+    <string name="complete_moves">Moves: %1$d</string>
+    <string name="complete_mistakes">Mistakes: %1$d</string>
+    <string name="complete_score_submitted">Score submitted to the leaderboard.</string>
+    <string name="complete_score_pending">Score will be submitted when you are online.</string>
+    <string name="complete_new_game">New game</string>
+    <string name="complete_view_leaderboard">Leaderboard</string>
+    <string name="complete_home">Home</string>
+
+    <!-- Leaderboard -->
+    <string name="leaderboard_title">Leaderboard</string>
+    <string name="leaderboard_empty">No scores yet. Be the first!</string>
+    <string name="leaderboard_loading">Loading scores…</string>
+    <string name="leaderboard_error">Could not load the leaderboard. Check your connection.</string>
+    <string name="leaderboard_retry">Retry</string>
+    <string name="leaderboard_rank">#%1$d</string>
+    <string name="leaderboard_entry">%1$s · %2$d moves</string>
+    <string name="leaderboard_you">You</string>
+    <string name="leaderboard_your_best">Your best: %1$s · %2$d moves</string>
+    <string name="leaderboard_no_best">You have not completed this category yet.</string>
+
+    <!-- Store -->
+    <string name="store_title">Store</string>
+    <string name="store_subtitle">No ads, ever. Lives are the only thing for sale.</string>
+    <string name="store_current_lives">You have %1$d lives</string>
+    <string name="store_unlimited_active">Unlimited lives active</string>
+    <string name="store_five_lives_title">5 Lives</string>
+    <string name="store_five_lives_description">Adds five lives instantly. Buy as many times as you like.</string>
+    <string name="store_unlimited_title">Unlimited Lives</string>
+    <string name="store_unlimited_description">Removes the lives system forever. One-time purchase.</string>
+    <string name="store_buy">Buy</string>
+    <string name="store_owned">Owned</string>
+    <string name="store_unavailable">Unavailable</string>
+    <string name="store_restore">Restore purchases</string>
+    <string name="store_connecting">Connecting to Google Play…</string>
+    <string name="store_error_unavailable">Google Play Billing is not available on this device.</string>
+    <string name="store_error_generic">Purchase failed. Please try again.</string>
+    <string name="store_purchase_success">Thank you! Your purchase has been applied.</string>
+    <string name="store_purchase_pending">Purchase pending. Lives will be added once payment completes.</string>
+
+    <!-- Misc -->
+    <string name="cancel">Cancel</string>
+    <string name="time_format">%1$02d:%2$02d</string>
+    <string name="time_format_hours">%1$d:%2$02d:%3$02d</string>
+</resources>
