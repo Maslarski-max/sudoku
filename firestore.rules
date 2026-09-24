@@ -1,0 +1,49 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidCategory(category) {
+      return category.matches('^(9|12|15|18)_(EASY|MEDIUM|HARD)$');
+    }
+
+    function isValidScore(data, category) {
+      return data.keys().hasOnly(['uid', 'displayName', 'gridSize', 'difficulty', 'timeMillis', 'moves', 'mistakes', 'completedAt'])
+        && data.uid is string && data.uid == request.auth.uid
+        && data.displayName is string && data.displayName.size() <= 32
+        && data.gridSize is int && data.gridSize in [9, 12, 15, 18]
+        && data.difficulty is string && data.difficulty in ['EASY', 'MEDIUM', 'HARD']
+        && (string(data.gridSize) + '_' + data.difficulty) == category
+        && data.timeMillis is int && data.timeMillis > 0 && data.timeMillis < 86400000
+        && data.moves is int && data.moves >= 0 && data.moves < 100000
+        && data.mistakes is int && data.mistakes >= 0 && data.mistakes < 100000
+        && data.completedAt == request.time;
+    }
+
+    // One document per player per category; only the owner may write, and only to improve.
+    match /leaderboards/{category}/scores/{uid} {
+      allow read: if isSignedIn() && isValidCategory(category);
+
+      allow create: if isSignedIn() && uid == request.auth.uid
+        && isValidCategory(category)
+        && isValidScore(request.resource.data, category);
+
+      allow update: if isSignedIn() && uid == request.auth.uid
+        && isValidCategory(category)
+        && isValidScore(request.resource.data, category)
+        && (request.resource.data.timeMillis < resource.data.timeMillis
+            || (request.resource.data.timeMillis == resource.data.timeMillis
+                && request.resource.data.moves < resource.data.moves));
+
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
