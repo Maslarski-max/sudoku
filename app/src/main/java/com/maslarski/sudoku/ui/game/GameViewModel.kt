@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maslarski.sudoku.domain.engine.GameEngine
 import com.maslarski.sudoku.domain.engine.HintEngine
+import com.maslarski.sudoku.domain.engine.ScoreBreakdown
+import com.maslarski.sudoku.domain.engine.ScoringRules
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
@@ -49,6 +51,7 @@ data class GameUiState(
     val missing: Boolean = false,
 ) {
     val isPaused: Boolean get() = pauseReason != PauseReason.NONE
+    val score: ScoreBreakdown? get() = game?.let(ScoringRules::breakdown)
     val outOfLives: Boolean get() = lives?.canPlay == false
 }
 

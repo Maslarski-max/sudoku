@@ -44,7 +44,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -56,12 +58,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maslarski.sudoku.R
+import com.maslarski.sudoku.domain.engine.ScoreBreakdown
+import com.maslarski.sudoku.domain.engine.ScoringRules
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.ui.components.difficultyLabel
 import com.maslarski.sudoku.ui.components.formatDuration
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -164,6 +169,7 @@ fun GameScreen(
     when {
         game.isComplete -> CompletionDialog(
             game = game,
+            score = ScoringRules.breakdown(game),
             submission = state.scoreSubmission,
             onNewGame = { viewModel.discardCompletedGame(); onNewGame() },
             onLeaderboard = { onOpenLeaderboard(game.gridSize, game.difficulty) },
@@ -198,6 +204,12 @@ private fun StatusRow(game: GameState, state: GameUiState) {
         Text(stringResource(R.string.game_mistakes, game.mistakes), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.width(16.dp))
         Text(stringResource(R.string.game_moves, game.moves), style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.width(16.dp))
+        Text(
+            stringResource(R.string.game_score, state.score?.total ?: 0),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
         Spacer(Modifier.weight(1f))
         Icon(Icons.Default.Favorite, contentDescription = stringResource(R.string.game_lives), tint = MaterialTheme.colorScheme.error)
         Spacer(Modifier.width(4.dp))
@@ -327,7 +339,14 @@ private fun OutOfLivesDialog(nextRegenAt: Long?, onOpenStore: () -> Unit, onQuit
                 Text(stringResource(R.string.lives_out_message))
                 if (nextRegenAt != null) {
                     Spacer(Modifier.height(8.dp))
-                    val remaining = (nextRegenAt - System.currentTimeMillis()).coerceAtLeast(0L)
+                    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+                    LaunchedEffect(nextRegenAt) {
+                        while (true) {
+                            now = System.currentTimeMillis()
+                            delay(1_000L)
+                        }
+                    }
+                    val remaining = (nextRegenAt - now).coerceAtLeast(0L)
                     Text(stringResource(R.string.lives_next_free, formatDuration(remaining)))
                 }
             }
@@ -340,6 +359,7 @@ private fun OutOfLivesDialog(nextRegenAt: Long?, onOpenStore: () -> Unit, onQuit
 @Composable
 private fun CompletionDialog(
     game: GameState,
+    score: ScoreBreakdown,
     submission: ScoreSubmission,
     onNewGame: () -> Unit,
     onLeaderboard: () -> Unit,
@@ -353,6 +373,27 @@ private fun CompletionDialog(
                 Text(stringResource(R.string.complete_time, formatDuration(game.elapsedMillis)))
                 Text(stringResource(R.string.complete_moves, game.moves))
                 Text(stringResource(R.string.complete_mistakes, game.mistakes))
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.complete_score_total, score.total), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.complete_score_base, score.correctEntries, ScoringRules.basePoints(game.gridSize), score.basePoints),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (score.mistakePenalty > 0) {
+                    Text(
+                        stringResource(R.string.complete_score_penalty, game.mistakes, ScoringRules.MISTAKE_PENALTY, score.mistakePenalty),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Text(
+                    if (score.timeBonus > 0) stringResource(R.string.complete_score_bonus, score.timeBonus, formatDuration(ScoringRules.targetTimeMillis(game)))
+                    else stringResource(R.string.complete_score_no_bonus, formatDuration(ScoringRules.targetTimeMillis(game))),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    stringResource(R.string.complete_score_multiplier, difficultyLabel(game.difficulty), score.multiplier),
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 Spacer(Modifier.height(8.dp))
                 when (submission) {
                     ScoreSubmission.Submitted -> Text(stringResource(R.string.complete_score_submitted))

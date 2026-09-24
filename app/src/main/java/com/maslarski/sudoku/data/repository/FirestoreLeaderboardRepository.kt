@@ -21,7 +21,7 @@ import javax.inject.Singleton
 
 /**
  * Firestore layout: `leaderboards/{gridSize}_{DIFFICULTY}/scores/{uid}` — one best score per player
- * per category, ranked by `timeMillis` then `moves`. Results are mirrored into Room so the UI has
+ * per category, ranked by `points` (desc) then `timeMillis` then `moves`. Results are mirrored into Room so the UI has
  * instant, offline-capable data; scores that fail to upload are queued and retried on the next refresh.
  */
 @Singleton
@@ -41,6 +41,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
         authRepository.ensureSignedIn()
         flushPending()
         val snapshot = scores(category)
+            .orderBy(FIELD_POINTS, Query.Direction.DESCENDING)
             .orderBy(FIELD_TIME, Query.Direction.ASCENDING)
             .orderBy(FIELD_MOVES, Query.Direction.ASCENDING)
             .limit(limit.toLong())
@@ -57,6 +58,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
                 timeMillis = doc.getLong(FIELD_TIME) ?: return@mapNotNull null,
                 moves = doc.getLong(FIELD_MOVES)?.toInt() ?: 0,
                 mistakes = doc.getLong(FIELD_MISTAKES)?.toInt() ?: 0,
+                points = doc.getLong(FIELD_POINTS)?.toInt() ?: 0,
                 completedAtEpochMillis = doc.getTimestamp(FIELD_COMPLETED)?.toDate()?.time ?: 0L,
             )
         }
@@ -77,6 +79,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
                 timeMillis = doc.getLong(FIELD_TIME) ?: return null,
                 moves = doc.getLong(FIELD_MOVES)?.toInt() ?: 0,
                 mistakes = doc.getLong(FIELD_MISTAKES)?.toInt() ?: 0,
+                points = doc.getLong(FIELD_POINTS)?.toInt() ?: 0,
                 completedAtEpochMillis = doc.getTimestamp(FIELD_COMPLETED)?.toDate()?.time ?: 0L,
             )
         }.getOrNull()
@@ -93,11 +96,14 @@ class FirestoreLeaderboardRepository @Inject constructor(
         return runCatching {
             val docRef = scores(category).document(score.uid)
             val remote = docRef.get().await()
-            val remoteTime = remote.getLong(FIELD_TIME)
-            val remoteMoves = remote.getLong(FIELD_MOVES)?.toInt() ?: Int.MAX_VALUE
-            val improves = remoteTime == null || score.timeMillis < remoteTime ||
-                (score.timeMillis == remoteTime && score.moves < remoteMoves)
-            if (!improves) return@runCatching false
+            val remoteBest = remote.takeIf { it.exists() }?.let { doc ->
+                score.copy(
+                    points = doc.getLong(FIELD_POINTS)?.toInt() ?: 0,
+                    timeMillis = doc.getLong(FIELD_TIME) ?: Long.MAX_VALUE,
+                    moves = doc.getLong(FIELD_MOVES)?.toInt() ?: Int.MAX_VALUE,
+                )
+            }
+            if (!score.isBetterThan(remoteBest)) return@runCatching false
             docRef.set(score.toDocument()).await()
             dao.deletePending(category.id)
             true
@@ -128,31 +134,32 @@ class FirestoreLeaderboardRepository @Inject constructor(
         FIELD_TIME to timeMillis,
         FIELD_MOVES to moves,
         FIELD_MISTAKES to mistakes,
+        FIELD_POINTS to points,
         FIELD_COMPLETED to FieldValue.serverTimestamp(),
     )
 
     private fun Score.toCache() = LeaderboardCacheEntity(
         category = category.id, uid = uid, displayName = displayName, gridSize = gridSize.size,
-        difficulty = difficulty.name, timeMillis = timeMillis, moves = moves, mistakes = mistakes,
+        difficulty = difficulty.name, timeMillis = timeMillis, moves = moves, mistakes = mistakes, points = points,
         completedAtEpochMillis = completedAtEpochMillis,
     )
 
     private fun Score.toPending() = PendingScoreEntity(
         category = category.id, uid = uid, displayName = displayName, gridSize = gridSize.size,
-        difficulty = difficulty.name, timeMillis = timeMillis, moves = moves, mistakes = mistakes,
+        difficulty = difficulty.name, timeMillis = timeMillis, moves = moves, mistakes = mistakes, points = points,
         completedAtEpochMillis = completedAtEpochMillis,
     )
 
     private fun LeaderboardCacheEntity.toScore() = Score(
         uid = uid, displayName = displayName, gridSize = GridSize.fromSize(gridSize),
         difficulty = Difficulty.valueOf(difficulty), timeMillis = timeMillis, moves = moves,
-        mistakes = mistakes, completedAtEpochMillis = completedAtEpochMillis,
+        mistakes = mistakes, points = points, completedAtEpochMillis = completedAtEpochMillis,
     )
 
     private fun PendingScoreEntity.toScore() = Score(
         uid = uid, displayName = displayName, gridSize = GridSize.fromSize(gridSize),
         difficulty = Difficulty.valueOf(difficulty), timeMillis = timeMillis, moves = moves,
-        mistakes = mistakes, completedAtEpochMillis = completedAtEpochMillis,
+        mistakes = mistakes, points = points, completedAtEpochMillis = completedAtEpochMillis,
     )
 
     private companion object {
@@ -165,6 +172,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
         const val FIELD_TIME = "timeMillis"
         const val FIELD_MOVES = "moves"
         const val FIELD_MISTAKES = "mistakes"
+        const val FIELD_POINTS = "points"
         const val FIELD_COMPLETED = "completedAt"
     }
 }

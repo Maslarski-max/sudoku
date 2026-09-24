@@ -1,5 +1,6 @@
 package com.maslarski.sudoku.domain.usecase
 
+import com.maslarski.sudoku.domain.engine.ScoringRules
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
@@ -41,6 +42,7 @@ class SubmitScoreUseCase @Inject constructor(
             timeMillis = state.elapsedMillis.coerceAtLeast(1L),
             moves = state.moves,
             mistakes = state.mistakes,
+            points = ScoringRules.points(state),
             completedAtEpochMillis = System.currentTimeMillis(),
         )
         leaderboardRepository.submit(score).getOrThrow()
