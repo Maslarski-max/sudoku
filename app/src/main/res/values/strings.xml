@@ -82,6 +82,7 @@
     <string name="complete_score_multiplier">%1$s multiplier: ×%2$.1f</string>
     <string name="complete_score_submitted">Score submitted to the leaderboard.</string>
     <string name="complete_score_pending">Score will be submitted when you are online.</string>
+    <string name="complete_score_not_best">Your personal best in this category still stands.</string>
     <string name="complete_new_game">New game</string>
     <string name="complete_view_leaderboard">Leaderboard</string>
     <string name="complete_home">Home</string>

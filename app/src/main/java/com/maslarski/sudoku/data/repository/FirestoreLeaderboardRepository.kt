@@ -2,6 +2,7 @@ package com.maslarski.sudoku.data.repository
 
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.maslarski.sudoku.data.local.LeaderboardCacheEntity
 import com.maslarski.sudoku.data.local.LeaderboardDao
@@ -85,43 +86,55 @@ class FirestoreLeaderboardRepository @Inject constructor(
         }.getOrNull()
     }
 
-    override suspend fun submit(score: Score): Result<Boolean> {
+    override suspend fun submit(score: Score): Result<Boolean> = runCatching {
         val category = score.category
         val localBest = dao.get(category.id, score.uid)?.toScore()
-        if (!score.isBetterThan(localBest)) return Result.success(false)
+        if (!score.isBetterThan(localBest)) return@runCatching false
 
         // Optimistically cache so the UI reflects the new best immediately.
         dao.upsertAll(listOf(score.toCache()))
 
-        return runCatching {
-            val docRef = scores(category).document(score.uid)
+        val docRef = scores(category).document(score.uid)
+        val uploaded = runCatching {
             val remote = docRef.get().await()
             val remoteBest = remote.takeIf { it.exists() }?.let { doc ->
                 score.copy(
                     points = doc.getLong(FIELD_POINTS)?.toInt() ?: 0,
                     timeMillis = doc.getLong(FIELD_TIME) ?: Long.MAX_VALUE,
                     moves = doc.getLong(FIELD_MOVES)?.toInt() ?: Int.MAX_VALUE,
+                    mistakes = doc.getLong(FIELD_MISTAKES)?.toInt() ?: 0,
+                    completedAtEpochMillis = doc.getTimestamp(FIELD_COMPLETED)?.toDate()?.time ?: 0L,
                 )
             }
-            if (!score.isBetterThan(remoteBest)) return@runCatching false
+            if (!score.isBetterThan(remoteBest)) {
+                // Remote already holds a better result (e.g. from another device); adopt it locally.
+                remoteBest?.let { dao.upsertAll(listOf(it.toCache())) }
+                return@runCatching false
+            }
             docRef.set(score.toDocument()).await()
-            dao.deletePending(category.id)
             true
-        }.onFailure {
+        }.getOrElse { error ->
+            // Rules rejected it (not an improvement server-side): nothing to retry. Otherwise queue for later.
+            if (error.isPermissionDenied()) return@runCatching false
             dao.upsertPending(score.toPending())
+            throw error
         }
+        if (uploaded) dao.deletePending(category.id)
+        uploaded
     }
 
     private suspend fun flushPending() {
         for (pending in dao.pending()) {
             val score = pending.toScore()
             val docRef = scores(score.category).document(score.uid)
-            runCatching {
-                docRef.set(score.toDocument()).await()
-                dao.deletePending(pending.category)
-            }
+            runCatching { docRef.set(score.toDocument()).await() }
+                .onSuccess { dao.deletePending(pending.category) }
+                .onFailure { if (it.isPermissionDenied()) dao.deletePending(pending.category) }
         }
     }
+
+    private fun Throwable.isPermissionDenied(): Boolean =
+        this is FirebaseFirestoreException && code == FirebaseFirestoreException.Code.PERMISSION_DENIED
 
     private fun scores(category: LeaderboardCategory) =
         firestore.collection(COLLECTION_LEADERBOARDS).document(category.id).collection(COLLECTION_SCORES)

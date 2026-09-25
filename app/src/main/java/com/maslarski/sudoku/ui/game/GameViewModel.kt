@@ -19,14 +19,12 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -37,7 +35,10 @@ enum class PauseReason { NONE, USER, OUT_OF_LIVES, BACKGROUND }
 sealed interface ScoreSubmission {
     data object NotSubmitted : ScoreSubmission
     data object Submitted : ScoreSubmission
+    /** Upload failed (offline etc.); the score is queued and retried on the next leaderboard refresh. */
     data object Pending : ScoreSubmission
+    /** Completed, but did not beat the player's existing best in this category. */
+    data object NotPersonalBest : ScoreSubmission
 }
 
 data class GameUiState(
@@ -70,8 +71,7 @@ class GameViewModel @Inject constructor(
 
     private val local = MutableStateFlow(GameUiState())
 
-    val uiState: StateFlow<GameUiState> = combine(local, livesRepository.lives) { s, lives -> s.copy(lives = lives) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, GameUiState())
+    val uiState: StateFlow<GameUiState> = local.asStateFlow()
 
     private var timerJob: Job? = null
 
@@ -97,12 +97,16 @@ class GameViewModel @Inject constructor(
         }
 
         // Lives gate: pause when out of lives, resume automatically when a life is restored/purchased.
+        // Lives are written into the same state as the pause reason so the two can never disagree.
         viewModelScope.launch {
-            livesRepository.lives.map { it.canPlay }.distinctUntilChanged().collect { canPlay ->
-                if (!canPlay) {
-                    pause(PauseReason.OUT_OF_LIVES)
-                } else if (local.value.pauseReason == PauseReason.OUT_OF_LIVES) {
-                    resume()
+            livesRepository.lives.collect { lives ->
+                local.update { s ->
+                    val next = s.copy(lives = lives)
+                    when {
+                        !lives.canPlay && s.game?.isComplete != true -> next.copy(pauseReason = PauseReason.OUT_OF_LIVES)
+                        lives.canPlay && s.pauseReason == PauseReason.OUT_OF_LIVES -> next.copy(pauseReason = PauseReason.NONE)
+                        else -> next
+                    }
                 }
             }
         }
@@ -137,9 +141,8 @@ class GameViewModel @Inject constructor(
     }
 
     fun resume() {
-        val outOfLives = uiState.value.outOfLives
         local.update { s ->
-            if (outOfLives) s.copy(pauseReason = PauseReason.OUT_OF_LIVES) else s.copy(pauseReason = PauseReason.NONE)
+            if (s.outOfLives) s.copy(pauseReason = PauseReason.OUT_OF_LIVES) else s.copy(pauseReason = PauseReason.NONE)
         }
     }
 
@@ -173,7 +176,7 @@ class GameViewModel @Inject constructor(
 
         val result = engine.enterValue(game, index, value)
         local.update { it.copy(game = result.state) }
-        if (result.wasMistake && uiState.value.lives?.unlimited != true) {
+        if (result.wasMistake && state.lives?.unlimited != true) {
             viewModelScope.launch { livesRepository.consumeLife() }
         }
         if (result.state.isComplete) onCompleted(result.state)
@@ -226,10 +229,11 @@ class GameViewModel @Inject constructor(
         timerJob?.cancel()
         viewModelScope.launch {
             gameRepository.save(state)
-            val remote = submitScore(state).getOrDefault(false)
-            local.update {
-                it.copy(scoreSubmission = if (remote) ScoreSubmission.Submitted else ScoreSubmission.Pending)
-            }
+            val submission = submitScore(state).fold(
+                onSuccess = { uploaded -> if (uploaded) ScoreSubmission.Submitted else ScoreSubmission.NotPersonalBest },
+                onFailure = { ScoreSubmission.Pending },
+            )
+            local.update { it.copy(scoreSubmission = submission) }
         }
     }
 
