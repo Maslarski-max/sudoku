@@ -35,7 +35,18 @@ alias for the host). For a physical device, pass your machine's LAN IP:
 ```
 
 `firestore.rules` enforces one score document per player per category
-(`leaderboards/{gridSize}_{DIFFICULTY}/scores/{uid}`) and only allows updates that improve the score.
+(`leaderboards/{gridSize}_{DIFFICULTY}/scores/{uid}`) and only allows updates that improve the score (higher points, then faster time, then fewer moves).
+
+### Scoring
+
+`ScoringRules` computes `total = (correct × base − mistakes × 20 + timeBonus) × multiplier`, floored at 0:
+
+- base per correct player entry: 9×9 = 10, 12×12 = 15, 15×15 = 20, 18×18 = 25 (hint-filled cells earn nothing)
+- multiplier: Easy ×1, Medium ×1.5, Hard ×2
+- time bonus (on completion only): target = empty cells × 12/16/20 s (Easy/Medium/Hard); bonus scales linearly
+  from `base × emptyCells` at 0 s down to 0 at the target
+
+The live score is shown during play, itemised on the completion dialog, and synced to Firestore as `points`.
 
 ## In-app products
 

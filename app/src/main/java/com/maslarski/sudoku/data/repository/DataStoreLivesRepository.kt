@@ -9,8 +9,11 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.repository.LivesRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,7 +28,18 @@ class DataStoreLivesRepository @Inject constructor(
     private val clock: () -> Long,
 ) : LivesRepository {
 
-    override val lives: Flow<Lives> = dataStore.data.map { prefs -> prefs.resolve(clock()).toLives() }
+    /** Re-resolves whenever preferences change and again each time a scheduled regeneration comes due. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override val lives: Flow<Lives> = dataStore.data.flatMapLatest { prefs ->
+        flow {
+            while (true) {
+                val lives = prefs.resolve(clock()).toLives()
+                emit(lives)
+                val nextAt = lives.nextRegenAtEpochMillis ?: break
+                delay((nextAt - clock()).coerceAtLeast(1_000L))
+            }
+        }
+    }
 
     override suspend fun consumeLife(): Boolean {
         var consumed = false

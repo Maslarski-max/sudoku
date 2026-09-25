@@ -8,13 +8,18 @@ data class Score(
     val timeMillis: Long,
     val moves: Int,
     val mistakes: Int,
+    val points: Int,
     val completedAtEpochMillis: Long,
 ) {
     val category: LeaderboardCategory get() = LeaderboardCategory(gridSize, difficulty)
 
-    /** Lower is better: primary key completion time, secondary key move count. */
-    fun isBetterThan(other: Score?): Boolean =
-        other == null || timeMillis < other.timeMillis || (timeMillis == other.timeMillis && moves < other.moves)
+    /** Ranking: highest points, then fastest time, then fewest moves. Mirrors `firestore.rules`. */
+    fun isBetterThan(other: Score?): Boolean = other == null || compareTo(other) < 0
+
+    fun compareTo(other: Score): Int = compareValuesBy(
+        this, other,
+        { -it.points }, { it.timeMillis }, { it.moves },
+    )
 }
 
 data class LeaderboardCategory(val gridSize: GridSize, val difficulty: Difficulty) {

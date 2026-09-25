@@ -24,7 +24,7 @@ interface SavedGameDao {
 
 @Dao
 interface LeaderboardDao {
-    @Query("SELECT * FROM leaderboard_cache WHERE category = :category ORDER BY timeMillis ASC, moves ASC LIMIT :limit")
+    @Query("SELECT * FROM leaderboard_cache WHERE category = :category ORDER BY points DESC, timeMillis ASC, moves ASC LIMIT :limit")
     fun observeTop(category: String, limit: Int): Flow<List<LeaderboardCacheEntity>>
 
     @Query("SELECT * FROM leaderboard_cache WHERE category = :category AND uid = :uid")

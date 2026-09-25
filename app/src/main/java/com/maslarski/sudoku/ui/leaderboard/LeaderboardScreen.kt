@@ -165,7 +165,7 @@ fun LeaderboardScreen(
 
             val best = state.personalBest
             Text(
-                if (best != null) stringResource(R.string.leaderboard_your_best, formatDuration(best.timeMillis), best.moves)
+                if (best != null) stringResource(R.string.leaderboard_your_best, best.points, formatDuration(best.timeMillis), best.moves)
                 else stringResource(R.string.leaderboard_no_best),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -218,7 +218,7 @@ private fun EntryRow(entry: LeaderboardEntry) {
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
-                    stringResource(R.string.leaderboard_entry, formatDuration(entry.score.timeMillis), entry.score.moves),
+                    stringResource(R.string.leaderboard_entry, entry.score.points, formatDuration(entry.score.timeMillis), entry.score.moves),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

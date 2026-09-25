@@ -4,6 +4,7 @@
       "collectionGroup": "scores",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "points", "order": "DESCENDING" },
         { "fieldPath": "timeMillis", "order": "ASCENDING" },
         { "fieldPath": "moves", "order": "ASCENDING" }
       ]

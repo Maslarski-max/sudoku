@@ -25,6 +25,7 @@ data class LeaderboardCacheEntity(
     val timeMillis: Long,
     val moves: Int,
     val mistakes: Int,
+    val points: Int,
     val completedAtEpochMillis: Long,
 )
 
@@ -39,5 +40,6 @@ data class PendingScoreEntity(
     val timeMillis: Long,
     val moves: Int,
     val mistakes: Int,
+    val points: Int,
     val completedAtEpochMillis: Long,
 )
