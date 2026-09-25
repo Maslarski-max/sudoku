@@ -21,7 +21,7 @@
     <string name="home_saved_games">Saved games</string>
     <string name="home_no_saved_games">No games in progress</string>
     <string name="home_replace_saved_title">Replace saved game?</string>
-    <string name="home_replace_saved_message">You already have a %1$d×%1$d game in progress. Starting a new one will discard it.</string>
+    <string name="home_replace_saved_message">You already have a %1$d×%1$d game in progress. Starting a new one will discard it and cost 1 Life.</string>
     <string name="home_replace_saved_confirm">Start new</string>
 
     <string name="grid_size_label">%1$d×%1$d</string>
@@ -46,6 +46,7 @@
     <string name="game_notes">Notes</string>
     <string name="game_notes_on">Notes on</string>
     <string name="game_hint">Hint</string>
+    <string name="game_hint_remaining">Hint (%1$d)</string>
     <string name="game_hint_title">Hint</string>
     <string name="game_hint_apply">Apply</string>
     <string name="game_hint_dismiss">Got it</string>
@@ -63,11 +64,14 @@
 
     <!-- Lives -->
     <string name="lives_out_title">Out of lives</string>
-    <string name="lives_out_message">Each mistake costs one life. The game is paused until you have at least one life.</string>
+    <string name="lives_out_message">Every 3 mistakes cost 1 Life. The game is paused until you have at least 1 Life.</string>
     <string name="lives_next_free">Next free life in %1$s</string>
     <string name="lives_unlimited">Unlimited lives</string>
     <string name="lives_go_to_store">Open store</string>
-    <string name="lives_remaining">%1$d lives</string>
+    <plurals name="lives_remaining">
+        <item quantity="one">%1$d Life</item>
+        <item quantity="other">%1$d Lives</item>
+    </plurals>
 
     <!-- Completion -->
     <string name="complete_title">Puzzle solved!</string>
@@ -102,7 +106,10 @@
     <!-- Store -->
     <string name="store_title">Store</string>
     <string name="store_subtitle">No ads, ever. Lives are the only thing for sale.</string>
-    <string name="store_current_lives">You have %1$d lives</string>
+    <plurals name="store_current_lives">
+        <item quantity="one">You have %1$d Life</item>
+        <item quantity="other">You have %1$d Lives</item>
+    </plurals>
     <string name="store_unlimited_active">Unlimited lives active</string>
     <string name="store_five_lives_title">5 Lives</string>
     <string name="store_five_lives_description">Adds five lives instantly. Buy as many times as you like.</string>

@@ -14,6 +14,11 @@ plugins {
 val hasFirebaseConfig = file("google-services.json").exists()
 if (hasFirebaseConfig) apply(plugin = libs.plugins.google.services.get().pluginId)
 
+val localProperties: Properties = rootProject.file("local.properties")
+    .takeIf { it.exists() }
+    ?.let { f -> Properties().apply { f.inputStream().use(::load) } }
+    ?: Properties()
+
 // Release signing: keystore.properties (git-ignored) with storeFile/storePassword/keyAlias/keyPassword.
 val releaseSigning: Properties? = rootProject.file("keystore.properties")
     .takeIf { it.exists() }
@@ -34,8 +39,11 @@ android {
         vectorDrawables { useSupportLibrary = true }
 
         buildConfigField("boolean", "FIREBASE_CONFIGURED", hasFirebaseConfig.toString())
-        // Android emulator reaches the host machine through 10.0.2.2. Override with -PfirebaseEmulatorHost=... .
-        val emulatorHost = (project.findProperty("firebaseEmulatorHost") as String?) ?: "10.0.2.2"
+        // Host running `firebase emulators:start`. Resolution order: -PfirebaseEmulatorHost=..., then
+        // local.properties, then gradle.properties (LAN IP for physical devices; use 10.0.2.2 for the Android emulator).
+        val emulatorHost = (project.findProperty("firebaseEmulatorHost") as String?)
+            ?: localProperties.getProperty("firebaseEmulatorHost")
+            ?: "10.0.2.2"
         buildConfigField("String", "FIREBASE_EMULATOR_HOST", "\"$emulatorHost\"")
         buildConfigField("int", "FIREBASE_AUTH_EMULATOR_PORT", "9099")
         buildConfigField("int", "FIREBASE_FIRESTORE_EMULATOR_PORT", "8080")

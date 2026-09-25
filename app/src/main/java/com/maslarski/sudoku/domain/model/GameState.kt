@@ -11,6 +11,8 @@ data class GameState(
     val elapsedMillis: Long = 0L,
     val moves: Int = 0,
     val mistakes: Int = 0,
+    /** Mistakes since the last life was lost; wraps back to 0 every [GameRules.MISTAKES_PER_LIFE]. */
+    val mistakeStreak: Int = 0,
     val hintsUsed: Int = 0,
     val isComplete: Boolean = false,
     val startedAtEpochMillis: Long,

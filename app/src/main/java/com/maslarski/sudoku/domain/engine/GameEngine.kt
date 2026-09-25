@@ -1,6 +1,7 @@
 package com.maslarski.sudoku.domain.engine
 
 import com.maslarski.sudoku.domain.model.Cell
+import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.domain.model.Move
@@ -11,8 +12,11 @@ import com.maslarski.sudoku.domain.model.Move
  */
 class GameEngine {
 
-    /** Outcome of entering a value: the new state and whether a life should be deducted. */
-    data class EntryResult(val state: GameState, val wasMistake: Boolean)
+    /**
+     * Outcome of entering a value. [wasMistake] is true for any wrong entry (scoring penalty);
+     * [lostLife] is true only on every [GameRules.MISTAKES_PER_LIFE]th mistake.
+     */
+    data class EntryResult(val state: GameState, val wasMistake: Boolean, val lostLife: Boolean = false)
 
     fun enterValue(state: GameState, index: Int, value: Int): EntryResult {
         val cell = state.cells[index]
@@ -20,11 +24,13 @@ class GameEngine {
         if (cell.value == value) return EntryResult(state, wasMistake = false)
 
         val correct = state.puzzle.solution[index] == value
+        val streak = if (correct) state.mistakeStreak else state.mistakeStreak + 1
+        val lostLife = !correct && streak >= GameRules.MISTAKES_PER_LIFE
         val after = cell.copy(value = value, notes = 0, isError = !correct)
-        val next = applyMove(state, Move(index, cell, after, costLife = !correct))
-            .let { if (!correct) it.copy(mistakes = it.mistakes + 1) else it }
+        val next = applyMove(state, Move(index, cell, after, costLife = lostLife))
+            .let { if (!correct) it.copy(mistakes = it.mistakes + 1, mistakeStreak = if (lostLife) 0 else streak) else it }
             .let { clearPeerNotes(it, index, value) }
-        return EntryResult(finalizeIfSolved(next), wasMistake = !correct)
+        return EntryResult(finalizeIfSolved(next), wasMistake = !correct, lostLife = lostLife)
     }
 
     fun toggleNote(state: GameState, index: Int, value: Int): GameState {

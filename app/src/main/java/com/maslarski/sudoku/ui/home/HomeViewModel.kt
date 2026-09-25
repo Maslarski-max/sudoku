@@ -3,6 +3,7 @@ package com.maslarski.sudoku.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.repository.GameRepository
@@ -66,21 +67,26 @@ class HomeViewModel @Inject constructor(
 
     fun dismissReplace() = selection.update { it.copy(confirmReplace = false) }
 
+    /** Abandoning an in-progress game of the same size costs [GameRules.ABORT_PENALTY_LIVES]. */
     fun confirmReplace() {
         selection.update { it.copy(confirmReplace = false) }
-        startGame()
+        val lives = uiState.value.lives
+        startGame(beforeStart = {
+            if (lives?.unlimited != true) repeat(GameRules.ABORT_PENALTY_LIVES) { livesRepository.consumeLife() }
+        })
     }
 
     fun continueGame(gridSize: GridSize) {
         _navigateToGame.tryEmit(gridSize)
     }
 
-    private fun startGame() {
+    private fun startGame(beforeStart: suspend () -> Unit = {}) {
         if (selection.value.generating) return
         val (gridSize, difficulty) = selection.value.let { it.gridSize to it.difficulty }
         selection.update { it.copy(generating = true) }
         viewModelScope.launch {
             try {
+                beforeStart()
                 startNewGame(gridSize, difficulty)
                 _navigateToGame.emit(gridSize)
             } finally {

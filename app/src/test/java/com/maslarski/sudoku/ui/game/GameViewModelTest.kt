@@ -32,6 +32,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -86,29 +87,103 @@ class GameViewModelTest {
 
     private fun GameState.wrongValueFor(index: Int): Int = (1..9).first { it != puzzle.solution[index] }
 
+    private fun GameState.emptyCells(): List<Int> = cells.indices.filter { cells[it].isEmpty }
+
+    /** Enters a wrong value into [count] distinct empty cells. */
+    private fun makeMistakes(vm: GameViewModel, count: Int, skip: Int = 0) {
+        initial.emptyCells().drop(skip).take(count).forEach { index ->
+            vm.selectCell(index)
+            vm.enterNumber(initial.wrongValueFor(index))
+        }
+        settle()
+    }
+
     @Test
-    fun `last mistake pauses the game with an out-of-lives dialog and blocks further input`() = vmTest {
+    fun `every third mistake costs exactly one life and resets the streak`() = vmTest {
+        lives.state.value = Lives(count = 5, unlimited = false, nextRegenAtEpochMillis = null)
+        val vm = viewModel()
+        settle()
+
+        makeMistakes(vm, 2)
+        assertEquals(2, vm.uiState.value.game?.mistakes)
+        assertEquals(2, vm.uiState.value.game?.mistakeStreak)
+        assertEquals(0, lives.consumed)
+
+        makeMistakes(vm, 1, skip = 2)
+        assertEquals(3, vm.uiState.value.game?.mistakes)
+        assertEquals(0, vm.uiState.value.game?.mistakeStreak)
+        assertEquals(1, lives.consumed)
+        assertEquals(4, vm.uiState.value.lives?.count)
+
+        makeMistakes(vm, 3, skip = 3)
+        assertEquals(6, vm.uiState.value.game?.mistakes)
+        assertEquals(0, vm.uiState.value.game?.mistakeStreak)
+        assertEquals(2, lives.consumed)
+    }
+
+    @Test
+    fun `third mistake on the last life pauses the game with an out-of-lives dialog and blocks further input`() = vmTest {
         lives.state.value = Lives(count = 1, unlimited = false, nextRegenAtEpochMillis = null)
         val vm = viewModel()
         settle()
 
-        val index = initial.firstEmpty()
-        vm.selectCell(index)
-        vm.enterNumber(initial.wrongValueFor(index))
-        settle()
+        makeMistakes(vm, 2)
+        assertEquals(PauseReason.NONE, vm.uiState.value.pauseReason)
+        assertEquals(1, vm.uiState.value.lives?.count)
 
+        makeMistakes(vm, 1, skip = 2)
         val state = vm.uiState.value
-        assertEquals(1, state.game?.mistakes)
+        assertEquals(3, state.game?.mistakes)
         assertEquals(0, state.lives?.count)
         assertTrue(state.outOfLives)
         assertEquals(PauseReason.OUT_OF_LIVES, state.pauseReason)
 
         // Input is ignored while out of lives, and the user cannot force a resume.
+        val index = initial.firstEmpty()
+        vm.selectCell(index)
         vm.enterNumber(initial.puzzle.solution[index])
         vm.resume()
         settle()
-        assertEquals(1, vm.uiState.value.game?.moves)
+        assertEquals(3, vm.uiState.value.game?.moves)
         assertEquals(PauseReason.OUT_OF_LIVES, vm.uiState.value.pauseReason)
+    }
+
+    @Test
+    fun `free players get three hints per game and then the hint action is disabled`() = vmTest {
+        val vm = viewModel()
+        settle()
+        assertEquals(3, vm.uiState.value.hintsRemaining)
+
+        repeat(3) {
+            vm.requestHint()
+            vm.applyHint()
+        }
+        settle()
+        assertEquals(3, vm.uiState.value.game?.hintsUsed)
+        assertEquals(0, vm.uiState.value.hintsRemaining)
+        assertFalse(vm.uiState.value.canUseHint)
+
+        vm.requestHint()
+        assertNull(vm.uiState.value.activeHint)
+        vm.applyHint()
+        settle()
+        assertEquals(3, vm.uiState.value.game?.hintsUsed)
+    }
+
+    @Test
+    fun `premium players are not limited to three hints`() = vmTest {
+        lives.state.value = Lives(count = 0, unlimited = true, nextRegenAtEpochMillis = null)
+        val vm = viewModel()
+        settle()
+        assertNull(vm.uiState.value.hintsRemaining)
+
+        repeat(4) {
+            vm.requestHint()
+            vm.applyHint()
+        }
+        settle()
+        assertEquals(4, vm.uiState.value.game?.hintsUsed)
+        assertTrue(vm.uiState.value.canUseHint)
     }
 
     @Test
@@ -130,12 +205,10 @@ class GameViewModelTest {
         val vm = viewModel()
         settle()
 
-        val index = initial.firstEmpty()
-        vm.selectCell(index)
-        vm.enterNumber(initial.wrongValueFor(index))
-        settle()
+        makeMistakes(vm, 6)
 
         assertEquals(PauseReason.NONE, vm.uiState.value.pauseReason)
+        assertEquals(6, vm.uiState.value.game?.mistakes)
         assertEquals(0, lives.consumed)
     }
 
