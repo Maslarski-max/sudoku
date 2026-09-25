@@ -249,7 +249,15 @@ private fun ActionRow(
                 style = MaterialTheme.typography.labelSmall,
             )
         }
-        ActionButton(Icons.Default.Lightbulb, R.string.game_hint, enabled, onHint)
+        val hintsRemaining = state.hintsRemaining
+        ActionButton(
+            Icons.Default.Lightbulb,
+            R.string.game_hint,
+            enabled && state.canUseHint,
+            onHint,
+            labelText = if (hintsRemaining == null) stringResource(R.string.game_hint)
+            else stringResource(R.string.game_hint_remaining, hintsRemaining),
+        )
     }
 }
 
@@ -259,12 +267,13 @@ private fun ActionButton(
     label: Int,
     enabled: Boolean,
     onClick: () -> Unit,
+    labelText: String = stringResource(label),
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         IconButton(onClick = onClick, enabled = enabled) {
             Icon(icon, contentDescription = stringResource(label))
         }
-        Text(stringResource(label), style = MaterialTheme.typography.labelSmall)
+        Text(labelText, style = MaterialTheme.typography.labelSmall)
     }
 }
 

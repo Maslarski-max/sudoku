@@ -39,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -149,7 +150,7 @@ fun HomeScreen(
                         when {
                             lives == null -> ""
                             lives.unlimited -> stringResource(R.string.lives_unlimited)
-                            else -> stringResource(R.string.lives_remaining, lives.count)
+                            else -> pluralStringResource(R.plurals.lives_remaining, lives.count, lives.count)
                         },
                     )
                     Spacer(Modifier.weight(1f))

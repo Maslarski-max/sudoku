@@ -7,6 +7,7 @@ import com.maslarski.sudoku.domain.engine.GameEngine
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.engine.ScoreBreakdown
 import com.maslarski.sudoku.domain.engine.ScoringRules
+import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
@@ -54,6 +55,9 @@ data class GameUiState(
     val isPaused: Boolean get() = pauseReason != PauseReason.NONE
     val score: ScoreBreakdown? get() = game?.let(ScoringRules::breakdown)
     val outOfLives: Boolean get() = lives?.canPlay == false
+    /** Null means unlimited (premium). */
+    val hintsRemaining: Int? get() = game?.let { GameRules.hintsRemaining(it, lives) }
+    val canUseHint: Boolean get() = game?.let { GameRules.canUseHint(it, lives) } == true
 }
 
 @OptIn(FlowPreview::class)
@@ -176,7 +180,7 @@ class GameViewModel @Inject constructor(
 
         val result = engine.enterValue(game, index, value)
         local.update { it.copy(game = result.state) }
-        if (result.wasMistake && state.lives?.unlimited != true) {
+        if (result.lostLife && state.lives?.unlimited != true) {
             viewModelScope.launch { livesRepository.consumeLife() }
         }
         if (result.state.isComplete) onCompleted(result.state)
@@ -191,7 +195,7 @@ class GameViewModel @Inject constructor(
     fun requestHint() {
         val state = local.value
         val game = state.game ?: return
-        if (state.isPaused || game.isComplete) return
+        if (state.isPaused || game.isComplete || !state.canUseHint) return
         val hint = hintEngine.nextHint(game)
         local.update {
             it.copy(activeHint = hint, selectedIndex = if (hint.index >= 0) hint.index else it.selectedIndex)
@@ -202,6 +206,7 @@ class GameViewModel @Inject constructor(
         val state = local.value
         val game = state.game ?: return
         val hint = state.activeHint ?: return
+        if (!state.canUseHint) return
         val next = engine.applyHint(game, hint)
         local.update { it.copy(game = next, activeHint = null) }
         if (next.isComplete) onCompleted(next)

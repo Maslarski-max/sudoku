@@ -27,12 +27,16 @@ npm install -g firebase-tools
 firebase emulators:start            # Auth :9099, Firestore :8080, UI :4000
 ```
 
-Debug builds (`BuildConfig.USE_FIREBASE_EMULATOR == true`) talk to `10.0.2.2` (the Android emulator's
-alias for the host). For a physical device, pass your machine's LAN IP:
+Debug builds (`BuildConfig.USE_FIREBASE_EMULATOR == true`) connect to the host in `firebaseEmulatorHost`
+(`gradle.properties`, currently the developer's LAN IP `192.168.178.86` so a physical device on the same
+Wi-Fi can sync scores; the emulators bind `0.0.0.0` in `firebase.json`). Override per machine via
+`local.properties` or on the command line — the Android emulator reaches the host through `10.0.2.2`:
 
 ```bash
-./gradlew :app:installDebug -PfirebaseEmulatorHost=192.168.1.20
+./gradlew :app:installDebug -PfirebaseEmulatorHost=10.0.2.2
 ```
+
+If the phone cannot connect, allow inbound TCP 8080 and 9099 through the host firewall.
 
 `firestore.rules` enforces one score document per player per category
 (`leaderboards/{gridSize}_{DIFFICULTY}/scores/{uid}`) and only allows updates that improve the score (higher points, then faster time, then fewer moves).

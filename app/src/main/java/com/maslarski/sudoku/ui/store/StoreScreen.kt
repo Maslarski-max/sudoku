@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -124,7 +125,7 @@ fun StoreScreen(
             if (lives != null) {
                 Text(
                     if (lives.unlimited) stringResource(R.string.store_unlimited_active)
-                    else stringResource(R.string.store_current_lives, lives.count),
+                    else pluralStringResource(R.plurals.store_current_lives, lives.count, lives.count),
                     style = MaterialTheme.typography.titleMedium,
                 )
             }
