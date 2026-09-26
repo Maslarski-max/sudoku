@@ -100,7 +100,7 @@ class GameViewModelTest {
 
     @Test
     fun `every third mistake costs exactly one life and resets the streak`() = vmTest {
-        lives.state.value = Lives(count = 5, unlimited = false, nextRegenAtEpochMillis = null)
+        lives.state.value = Lives(count = 5, unlimited = false)
         val vm = viewModel()
         settle()
 
@@ -123,7 +123,7 @@ class GameViewModelTest {
 
     @Test
     fun `third mistake on the last life pauses the game with an out-of-lives dialog and blocks further input`() = vmTest {
-        lives.state.value = Lives(count = 1, unlimited = false, nextRegenAtEpochMillis = null)
+        lives.state.value = Lives(count = 1, unlimited = false)
         val vm = viewModel()
         settle()
 
@@ -172,7 +172,7 @@ class GameViewModelTest {
 
     @Test
     fun `premium players are not limited to three hints`() = vmTest {
-        lives.state.value = Lives(count = 0, unlimited = true, nextRegenAtEpochMillis = null)
+        lives.state.value = Lives(count = 0, unlimited = true)
         val vm = viewModel()
         settle()
         assertNull(vm.uiState.value.hintsRemaining)
@@ -188,7 +188,7 @@ class GameViewModelTest {
 
     @Test
     fun `gaining a life resumes an out-of-lives game`() = vmTest {
-        lives.state.value = Lives(count = 0, unlimited = false, nextRegenAtEpochMillis = null)
+        lives.state.value = Lives(count = 0, unlimited = false)
         val vm = viewModel()
         settle()
         assertEquals(PauseReason.OUT_OF_LIVES, vm.uiState.value.pauseReason)
@@ -201,7 +201,7 @@ class GameViewModelTest {
 
     @Test
     fun `unlimited lives never consume a life on mistakes`() = vmTest {
-        lives.state.value = Lives(count = 0, unlimited = true, nextRegenAtEpochMillis = null)
+        lives.state.value = Lives(count = 0, unlimited = true)
         val vm = viewModel()
         settle()
 
@@ -267,7 +267,7 @@ private class FakeGameRepository : GameRepository {
 }
 
 private class FakeLivesRepository : LivesRepository {
-    val state = MutableStateFlow(Lives(count = Lives.STARTING_LIVES, unlimited = false, nextRegenAtEpochMillis = null))
+    val state = MutableStateFlow(Lives(count = Lives.STARTING_LIVES, unlimited = false))
     var consumed = 0
     override val lives: Flow<Lives> get() = state
     override suspend fun consumeLife(): Boolean {

@@ -106,7 +106,7 @@ class HomeViewModelTest {
 
     @Test
     fun `unlimited lives are never charged for replacing a game`() = runTest(dispatcher) {
-        lives.state.value = Lives(count = 0, unlimited = true, nextRegenAtEpochMillis = null)
+        lives.state.value = Lives(count = 0, unlimited = true)
         saveInProgress(GridSize.NINE)
         val vm = viewModel()
         val collector = backgroundScope.launchCollect(vm)
@@ -121,7 +121,7 @@ class HomeViewModelTest {
 
     @Test
     fun `replacing at zero lives is refused and keeps the saved game`() = runTest(dispatcher) {
-        lives.state.value = Lives(count = 0, unlimited = false, nextRegenAtEpochMillis = null)
+        lives.state.value = Lives(count = 0, unlimited = false)
         saveInProgress(GridSize.NINE)
         val original = games.saved.value.getValue(GridSize.NINE)
         val vm = viewModel()
@@ -143,7 +143,7 @@ class HomeViewModelTest {
 
     @Test
     fun `a life lost while generating still refuses the replacement without charging`() = runTest(dispatcher) {
-        lives.state.value = Lives(count = 1, unlimited = false, nextRegenAtEpochMillis = null)
+        lives.state.value = Lives(count = 1, unlimited = false)
         saveInProgress(GridSize.NINE)
         val original = games.saved.value.getValue(GridSize.NINE)
         val vm = viewModel()
@@ -201,7 +201,7 @@ class HomeViewModelTest {
 
     @Test
     fun `unlimited revoked during generation is still charged at save time`() = runTest(dispatcher) {
-        lives.state.value = Lives(count = 3, unlimited = true, nextRegenAtEpochMillis = null)
+        lives.state.value = Lives(count = 3, unlimited = true)
         saveInProgress(GridSize.NINE)
         val vm = viewModel()
         val collector = backgroundScope.launchCollect(vm)
@@ -240,7 +240,7 @@ private class FakeGameRepository : GameRepository {
 }
 
 private class FakeLivesRepository : LivesRepository {
-    val state = MutableStateFlow(Lives(count = Lives.STARTING_LIVES, unlimited = false, nextRegenAtEpochMillis = null))
+    val state = MutableStateFlow(Lives(count = Lives.STARTING_LIVES, unlimited = false))
     var consumed = 0
     override val lives: Flow<Lives> get() = state
     override suspend fun consumeLife(): Boolean {

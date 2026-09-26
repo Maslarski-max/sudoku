@@ -68,8 +68,7 @@
 
     <!-- Lives -->
     <string name="lives_out_title">Out of lives</string>
-    <string name="lives_out_message">Every 3 mistakes cost 1 Life. The game is paused until you have at least 1 Life.</string>
-    <string name="lives_next_free">Next free life in %1$s</string>
+    <string name="lives_out_message">Every 3 mistakes cost 1 Life. Lives don\'t regenerate — get more in the store to keep playing.</string>
     <string name="lives_unlimited">Unlimited lives</string>
     <string name="lives_go_to_store">Open store</string>
     <plurals name="lives_remaining">
