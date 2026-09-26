@@ -180,6 +180,43 @@ class HomeViewModelTest {
         collector.cancel()
     }
 
+    @Test
+    fun `a failed replacement save refunds the life and keeps the saved game`() = runTest(dispatcher) {
+        saveInProgress(GridSize.NINE)
+        val original = games.saved.value.getValue(GridSize.NINE)
+        games.failNextSave = true
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        runCurrent()
+
+        vm.onNewGameClicked()
+        vm.confirmReplace()
+        runCurrent()
+
+        assertTrue(vm.uiState.value.startFailed)
+        assertEquals(Lives.STARTING_LIVES, lives.state.value.count)
+        assertEquals(original, games.saved.value[GridSize.NINE])
+        collector.cancel()
+    }
+
+    @Test
+    fun `unlimited revoked during generation is still charged at save time`() = runTest(dispatcher) {
+        lives.state.value = Lives(count = 3, unlimited = true, nextRegenAtEpochMillis = null)
+        saveInProgress(GridSize.NINE)
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        runCurrent()
+
+        vm.onNewGameClicked()
+        vm.confirmReplace()
+        lives.state.value = lives.state.value.copy(unlimited = false)
+        runCurrent()
+
+        assertEquals(1, lives.consumed)
+        assertEquals(2, lives.state.value.count)
+        collector.cancel()
+    }
+
     private fun CoroutineScope.launchCollect(vm: HomeViewModel) = launch { vm.uiState.collect {} }
 }
 
@@ -191,7 +228,14 @@ private class FakeGameRepository : GameRepository {
         }
     }
     override suspend fun load(gridSize: GridSize): GameState? = saved.value[gridSize]
-    override suspend fun save(state: GameState) = saved.update { it + (state.gridSize to state) }
+    var failNextSave = false
+    override suspend fun save(state: GameState) {
+        if (failNextSave) {
+            failNextSave = false
+            throw IllegalStateException("disk full")
+        }
+        saved.update { it + (state.gridSize to state) }
+    }
     override suspend fun delete(gridSize: GridSize) = saved.update { it - gridSize }
 }
 

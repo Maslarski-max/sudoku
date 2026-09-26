@@ -208,6 +208,17 @@ fun HomeScreen(
             },
         )
     }
+
+    if (state.startFailed) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissStartFailed,
+            title = { Text(stringResource(R.string.home_start_failed_title)) },
+            text = { Text(stringResource(R.string.home_start_failed_message)) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissStartFailed) { Text(stringResource(R.string.ok)) }
+            },
+        )
+    }
 }
 
 @Composable
