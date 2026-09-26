@@ -44,7 +44,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,7 +65,6 @@ import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.ui.components.difficultyLabel
 import com.maslarski.sudoku.ui.components.formatDuration
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -176,7 +174,6 @@ fun GameScreen(
             onHome = { viewModel.discardCompletedGame(); onBack() },
         )
         state.pauseReason == PauseReason.OUT_OF_LIVES -> OutOfLivesDialog(
-            nextRegenAt = state.lives?.nextRegenAtEpochMillis,
             onOpenStore = onOpenStore,
             onQuit = onBack,
         )
@@ -339,27 +336,11 @@ private fun HintDialog(hint: Hint, gridSize: GridSize, onApply: () -> Unit, onDi
 }
 
 @Composable
-private fun OutOfLivesDialog(nextRegenAt: Long?, onOpenStore: () -> Unit, onQuit: () -> Unit) {
+private fun OutOfLivesDialog(onOpenStore: () -> Unit, onQuit: () -> Unit) {
     AlertDialog(
         onDismissRequest = {},
         title = { Text(stringResource(R.string.lives_out_title)) },
-        text = {
-            Column {
-                Text(stringResource(R.string.lives_out_message))
-                if (nextRegenAt != null) {
-                    Spacer(Modifier.height(8.dp))
-                    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-                    LaunchedEffect(nextRegenAt) {
-                        while (true) {
-                            now = System.currentTimeMillis()
-                            delay(1_000L)
-                        }
-                    }
-                    val remaining = (nextRegenAt - now).coerceAtLeast(0L)
-                    Text(stringResource(R.string.lives_next_free, formatDuration(remaining)))
-                }
-            }
-        },
+        text = { Text(stringResource(R.string.lives_out_message)) },
         confirmButton = { Button(onClick = onOpenStore) { Text(stringResource(R.string.lives_go_to_store)) } },
         dismissButton = { TextButton(onClick = onQuit) { Text(stringResource(R.string.game_quit)) } },
     )

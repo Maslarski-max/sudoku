@@ -1,7 +1,7 @@
 # Sudoku
 
 Ad-free Android Sudoku with 9×9, 12×12, 15×15 and 18×18 grids, three difficulty levels, a lives
-system backed by Google Play Billing, and Firebase-powered global leaderboards.
+system (5 to start, 1 lost per 3 mistakes, no timed regeneration — more only via Google Play Billing), and Firebase-powered global leaderboards.
 
 - Kotlin · Jetpack Compose (Material 3) · MVVM + Clean Architecture · Hilt
 - compileSdk/targetSdk 36 · minSdk 26

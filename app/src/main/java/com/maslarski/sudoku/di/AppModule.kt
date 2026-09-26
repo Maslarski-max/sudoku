@@ -49,10 +49,6 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideClock(): () -> Long = System::currentTimeMillis
-
-    @Provides
-    @Singleton
     fun provideDatabase(@ApplicationContext context: Context): SudokuDatabase =
         Room.databaseBuilder(context, SudokuDatabase::class.java, "sudoku.db")
             .fallbackToDestructiveMigration(dropAllTables = true)
