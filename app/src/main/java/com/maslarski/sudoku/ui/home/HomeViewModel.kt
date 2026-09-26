@@ -11,6 +11,7 @@ import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
 import com.maslarski.sudoku.domain.usecase.StartNewGameUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -30,6 +32,10 @@ data class HomeUiState(
     val lives: Lives? = null,
     val generating: Boolean = false,
     val confirmReplace: Boolean = false,
+    /** Set when a replacement was refused because the abort penalty could not be paid. */
+    val replaceBlocked: Boolean = false,
+    /** Set when generating or saving a new game threw; any charge has been refunded. */
+    val startFailed: Boolean = false,
 ) {
     val savedForSelection: SavedGameSummary? get() = savedGames.firstOrNull { it.gridSize == gridSize }
 }
@@ -67,28 +73,51 @@ class HomeViewModel @Inject constructor(
 
     fun dismissReplace() = selection.update { it.copy(confirmReplace = false) }
 
-    /** Abandoning an in-progress game of the same size costs [GameRules.ABORT_PENALTY_LIVES]. */
+    /**
+     * Abandoning an in-progress game of the same size costs [GameRules.ABORT_PENALTY_LIVES]. The life is
+     * charged only once the replacement puzzle exists; if it cannot be charged the old game is kept.
+     */
     fun confirmReplace() {
         selection.update { it.copy(confirmReplace = false) }
         val lives = uiState.value.lives
-        startGame(beforeStart = {
-            if (lives?.unlimited != true) repeat(GameRules.ABORT_PENALTY_LIVES) { livesRepository.consumeLife() }
-        })
+        if (lives?.canPlay == false) {
+            selection.update { it.copy(replaceBlocked = true) }
+            return
+        }
+        // consumeLife() is atomic and a no-op for unlimited lives, so it is the source of truth at save time.
+        startGame(
+            beforeSave = { (1..GameRules.ABORT_PENALTY_LIVES).all { livesRepository.consumeLife() } },
+            onSaveFailed = {
+                if (livesRepository.lives.first().unlimited.not()) livesRepository.addLives(GameRules.ABORT_PENALTY_LIVES)
+            },
+        )
     }
+
+    fun dismissReplaceBlocked() = selection.update { it.copy(replaceBlocked = false) }
+    fun dismissStartFailed() = selection.update { it.copy(startFailed = false) }
 
     fun continueGame(gridSize: GridSize) {
         _navigateToGame.tryEmit(gridSize)
     }
 
-    private fun startGame(beforeStart: suspend () -> Unit = {}) {
+    private fun startGame(
+        beforeSave: suspend () -> Boolean = { true },
+        onSaveFailed: suspend () -> Unit = {},
+    ) {
         if (selection.value.generating) return
         val (gridSize, difficulty) = selection.value.let { it.gridSize to it.difficulty }
         selection.update { it.copy(generating = true) }
         viewModelScope.launch {
             try {
-                beforeStart()
-                startNewGame(gridSize, difficulty)
+                if (startNewGame(gridSize, difficulty, beforeSave, onSaveFailed) == null) {
+                    selection.update { it.copy(replaceBlocked = true) }
+                    return@launch
+                }
                 _navigateToGame.emit(gridSize)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                selection.update { it.copy(startFailed = true) }
             } finally {
                 selection.update { it.copy(generating = false) }
             }

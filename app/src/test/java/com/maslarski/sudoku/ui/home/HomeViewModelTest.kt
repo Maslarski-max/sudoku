@@ -9,7 +9,9 @@ import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
 import com.maslarski.sudoku.domain.usecase.StartNewGameUseCase
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -117,6 +119,104 @@ class HomeViewModelTest {
         collector.cancel()
     }
 
+    @Test
+    fun `replacing at zero lives is refused and keeps the saved game`() = runTest(dispatcher) {
+        lives.state.value = Lives(count = 0, unlimited = false, nextRegenAtEpochMillis = null)
+        saveInProgress(GridSize.NINE)
+        val original = games.saved.value.getValue(GridSize.NINE)
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        runCurrent()
+
+        vm.onNewGameClicked()
+        vm.confirmReplace()
+        runCurrent()
+        assertTrue(vm.uiState.value.replaceBlocked)
+        assertEquals(0, lives.consumed)
+        assertEquals(original, games.saved.value[GridSize.NINE])
+
+        vm.dismissReplaceBlocked()
+        runCurrent()
+        assertFalse(vm.uiState.value.replaceBlocked)
+        collector.cancel()
+    }
+
+    @Test
+    fun `a life lost while generating still refuses the replacement without charging`() = runTest(dispatcher) {
+        lives.state.value = Lives(count = 1, unlimited = false, nextRegenAtEpochMillis = null)
+        saveInProgress(GridSize.NINE)
+        val original = games.saved.value.getValue(GridSize.NINE)
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        runCurrent()
+
+        vm.onNewGameClicked()
+        vm.confirmReplace()
+        // Lives drop to zero (e.g. another screen) before the puzzle is generated and saved.
+        lives.state.value = lives.state.value.copy(count = 0)
+        runCurrent()
+
+        assertTrue(vm.uiState.value.replaceBlocked)
+        assertEquals(0, lives.consumed)
+        assertEquals(original, games.saved.value[GridSize.NINE])
+        collector.cancel()
+    }
+
+    @Test
+    fun `cancelling during generation charges nothing and keeps the saved game`() = runTest(dispatcher) {
+        saveInProgress(GridSize.NINE)
+        val original = games.saved.value.getValue(GridSize.NINE)
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        runCurrent()
+
+        vm.onNewGameClicked()
+        vm.confirmReplace()
+        vm.viewModelScope.cancel()
+        runCurrent()
+
+        assertEquals(0, lives.consumed)
+        assertEquals(original, games.saved.value[GridSize.NINE])
+        collector.cancel()
+    }
+
+    @Test
+    fun `a failed replacement save refunds the life and keeps the saved game`() = runTest(dispatcher) {
+        saveInProgress(GridSize.NINE)
+        val original = games.saved.value.getValue(GridSize.NINE)
+        games.failNextSave = true
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        runCurrent()
+
+        vm.onNewGameClicked()
+        vm.confirmReplace()
+        runCurrent()
+
+        assertTrue(vm.uiState.value.startFailed)
+        assertEquals(Lives.STARTING_LIVES, lives.state.value.count)
+        assertEquals(original, games.saved.value[GridSize.NINE])
+        collector.cancel()
+    }
+
+    @Test
+    fun `unlimited revoked during generation is still charged at save time`() = runTest(dispatcher) {
+        lives.state.value = Lives(count = 3, unlimited = true, nextRegenAtEpochMillis = null)
+        saveInProgress(GridSize.NINE)
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        runCurrent()
+
+        vm.onNewGameClicked()
+        vm.confirmReplace()
+        lives.state.value = lives.state.value.copy(unlimited = false)
+        runCurrent()
+
+        assertEquals(1, lives.consumed)
+        assertEquals(2, lives.state.value.count)
+        collector.cancel()
+    }
+
     private fun CoroutineScope.launchCollect(vm: HomeViewModel) = launch { vm.uiState.collect {} }
 }
 
@@ -128,7 +228,14 @@ private class FakeGameRepository : GameRepository {
         }
     }
     override suspend fun load(gridSize: GridSize): GameState? = saved.value[gridSize]
-    override suspend fun save(state: GameState) = saved.update { it + (state.gridSize to state) }
+    var failNextSave = false
+    override suspend fun save(state: GameState) {
+        if (failNextSave) {
+            failNextSave = false
+            throw IllegalStateException("disk full")
+        }
+        saved.update { it + (state.gridSize to state) }
+    }
     override suspend fun delete(gridSize: GridSize) = saved.update { it - gridSize }
 }
 

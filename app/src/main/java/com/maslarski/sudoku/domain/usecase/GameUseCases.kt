@@ -11,6 +11,7 @@ import com.maslarski.sudoku.domain.repository.AuthRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -19,11 +20,30 @@ class StartNewGameUseCase @Inject constructor(
     private val gameRepository: GameRepository,
     private val defaultDispatcher: CoroutineDispatcher,
 ) {
-    suspend operator fun invoke(gridSize: GridSize, difficulty: Difficulty): GameState {
+    /**
+     * Generates a puzzle, then runs [beforeSave] and persists the new game only if it returns true.
+     * [beforeSave] and the save run together non-cancellably, so a charge taken in [beforeSave] can
+     * never be stranded without its game (and a cancelled generation costs nothing). If the save itself
+     * throws, [onSaveFailed] runs (e.g. to refund the charge) before the exception propagates.
+     */
+    suspend operator fun invoke(
+        gridSize: GridSize,
+        difficulty: Difficulty,
+        beforeSave: suspend () -> Boolean = { true },
+        onSaveFailed: suspend () -> Unit = {},
+    ): GameState? {
         val puzzle = withContext(defaultDispatcher) { generator.generate(gridSize, difficulty) }
         val state = GameState.fromPuzzle(puzzle, nowEpochMillis = System.currentTimeMillis())
-        gameRepository.save(state)
-        return state
+        return withContext(NonCancellable) {
+            if (!beforeSave()) return@withContext null
+            try {
+                gameRepository.save(state)
+            } catch (e: Exception) {
+                onSaveFailed()
+                throw e
+            }
+            state
+        }
     }
 }
 

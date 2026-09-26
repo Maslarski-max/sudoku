@@ -192,6 +192,33 @@ fun HomeScreen(
             },
         )
     }
+
+    if (state.replaceBlocked) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissReplaceBlocked,
+            title = { Text(stringResource(R.string.home_replace_blocked_title)) },
+            text = { Text(stringResource(R.string.home_replace_blocked_message)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissReplaceBlocked(); onOpenStore() }) {
+                    Text(stringResource(R.string.lives_go_to_store))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissReplaceBlocked) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    if (state.startFailed) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissStartFailed,
+            title = { Text(stringResource(R.string.home_start_failed_title)) },
+            text = { Text(stringResource(R.string.home_start_failed_message)) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissStartFailed) { Text(stringResource(R.string.ok)) }
+            },
+        )
+    }
 }
 
 @Composable

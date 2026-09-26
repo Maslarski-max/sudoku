@@ -23,6 +23,10 @@
     <string name="home_replace_saved_title">Replace saved game?</string>
     <string name="home_replace_saved_message">You already have a %1$d×%1$d game in progress. Starting a new one will discard it and cost 1 Life.</string>
     <string name="home_replace_saved_confirm">Start new</string>
+    <string name="home_replace_blocked_title">Not enough lives</string>
+    <string name="home_replace_blocked_message">Replacing a game in progress costs 1 Life, and you have none left. Your saved game has been kept.</string>
+    <string name="home_start_failed_title">Couldn\'t start game</string>
+    <string name="home_start_failed_message">Something went wrong while saving the new puzzle. Your saved game and lives are unchanged.</string>
 
     <string name="grid_size_label">%1$d×%1$d</string>
     <string name="difficulty_easy">Easy</string>
@@ -127,6 +131,7 @@
 
     <!-- Misc -->
     <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
     <string name="time_format">%1$02d:%2$02d</string>
     <string name="time_format_hours">%1$d:%2$02d:%3$02d</string>
 </resources>

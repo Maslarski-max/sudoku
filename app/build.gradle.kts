@@ -41,8 +41,10 @@ android {
         buildConfigField("boolean", "FIREBASE_CONFIGURED", hasFirebaseConfig.toString())
         // Host running `firebase emulators:start`. Resolution order: -PfirebaseEmulatorHost=..., then
         // local.properties, then gradle.properties (LAN IP for physical devices; use 10.0.2.2 for the Android emulator).
-        val emulatorHost = (project.findProperty("firebaseEmulatorHost") as String?)
+        // gradle.properties values also surface through findProperty, so command-line -P is read from startParameter.
+        val emulatorHost = gradle.startParameter.projectProperties["firebaseEmulatorHost"]
             ?: localProperties.getProperty("firebaseEmulatorHost")
+            ?: (project.findProperty("firebaseEmulatorHost") as String?)
             ?: "10.0.2.2"
         buildConfigField("String", "FIREBASE_EMULATOR_HOST", "\"$emulatorHost\"")
         buildConfigField("int", "FIREBASE_AUTH_EMULATOR_PORT", "9099")
