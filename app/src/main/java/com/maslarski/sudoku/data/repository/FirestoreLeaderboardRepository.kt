@@ -91,10 +91,13 @@ class FirestoreLeaderboardRepository @Inject constructor(
 
     override suspend fun submit(score: Score): Result<Boolean> = runCatching {
         val category = score.category
+        // One pending slot per category: never let a later, worse result evict a queued better one.
+        val pendingBest = pendingFor(category)
         if (score.isAnonymous) {
-            dao.upsertPending(score.toPending())
+            if (score.isBetterThan(pendingBest)) dao.upsertPending(score.toPending())
             error("Not signed in; score queued for upload")
         }
+        if (!score.isBetterThan(pendingBest)) return@runCatching false
         val localBest = dao.get(category.id, score.uid)?.toScore()
         if (!score.isBetterThan(localBest)) return@runCatching false
 
@@ -129,6 +132,9 @@ class FirestoreLeaderboardRepository @Inject constructor(
         if (uploaded) dao.deletePending(category.id)
         uploaded
     }
+
+    private suspend fun pendingFor(category: LeaderboardCategory): Score? =
+        dao.pending().firstOrNull { it.category == category.id }?.toScore()
 
     private suspend fun flushPending() {
         for (pending in dao.pending()) {
