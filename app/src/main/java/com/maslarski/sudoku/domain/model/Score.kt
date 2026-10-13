@@ -12,6 +12,8 @@ data class Score(
     val completedAtEpochMillis: Long,
 ) {
     val category: LeaderboardCategory get() = LeaderboardCategory(gridSize, difficulty)
+    /** Completed before anonymous sign-in succeeded; the uid is assigned when the score is uploaded. */
+    val isAnonymous: Boolean get() = uid.isEmpty()
 
     /** Ranking: highest points, then fastest time, then fewest moves. Mirrors `firestore.rules`. */
     fun isBetterThan(other: Score?): Boolean = other == null || compareTo(other) < 0
@@ -20,6 +22,10 @@ data class Score(
         this, other,
         { -it.points }, { it.timeMillis }, { it.moves },
     )
+
+    companion object {
+        fun displayNameFor(uid: String): String = "Player ${uid.takeLast(4).uppercase()}"
+    }
 }
 
 data class LeaderboardCategory(val gridSize: GridSize, val difficulty: Difficulty) {

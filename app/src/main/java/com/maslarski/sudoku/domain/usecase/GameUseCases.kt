@@ -53,10 +53,11 @@ class SubmitScoreUseCase @Inject constructor(
 ) {
     /** Returns true when the score reached the remote leaderboard. */
     suspend operator fun invoke(state: GameState): Result<Boolean> = runCatching {
-        val uid = authRepository.ensureSignedIn()
+        // Sign-in may be unreachable right now; the score is still queued (uid-less) and uploaded on the next refresh.
+        val uid = runCatching { authRepository.ensureSignedIn() }.getOrDefault("")
         val score = Score(
             uid = uid,
-            displayName = "Player ${uid.takeLast(4).uppercase()}",
+            displayName = Score.displayNameFor(uid),
             gridSize = state.gridSize,
             difficulty = state.difficulty,
             timeMillis = state.elapsedMillis.coerceAtLeast(1L),

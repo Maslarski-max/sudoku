@@ -68,13 +68,15 @@ class GameViewModelTest {
         }
     }
 
-    private fun viewModel() = GameViewModel(
+    private fun viewModel(
+        submitScore: SubmitScoreUseCase = SubmitScoreUseCase(FakeAuthRepository(), leaderboard),
+    ) = GameViewModel(
         savedStateHandle = SavedStateHandle(mapOf("gridSize" to 9)),
         gameRepository = games,
         livesRepository = lives,
         engine = GameEngine(),
         hintEngine = HintEngine(),
-        submitScore = SubmitScoreUseCase(FakeAuthRepository(), leaderboard),
+        submitScore = submitScore,
     ).also { store.put("game", it) }
 
     /** The timer ticks forever, so advance a bounded amount of virtual time instead of idling. */
@@ -230,6 +232,18 @@ class GameViewModelTest {
     }
 
     @Test
+    fun `sign-in failure still queues an anonymous score for upload`() = vmTest {
+        leaderboard.result = Result.failure(IOException("queued"))
+        val vm = viewModel(submitScore = SubmitScoreUseCase(FailingAuthRepository(), leaderboard))
+        settle()
+        completeBoard(vm)
+        assertEquals(ScoreSubmission.Pending, vm.uiState.value.scoreSubmission)
+        val submitted = leaderboard.submitted.single()
+        assertTrue(submitted.isAnonymous)
+        assertTrue(submitted.points > 0)
+    }
+
+    @Test
     fun `upload failure marks the score pending instead of crashing`() = vmTest {
         leaderboard.result = Result.failure(IOException("offline"))
         val vm = viewModel()
@@ -285,6 +299,11 @@ private class FakeLivesRepository : LivesRepository {
 private class FakeAuthRepository : AuthRepository {
     override val currentUserId: String = "test-user-1234"
     override suspend fun ensureSignedIn(): String = currentUserId
+}
+
+private class FailingAuthRepository : AuthRepository {
+    override val currentUserId: String? = null
+    override suspend fun ensureSignedIn(): String = throw IOException("auth unreachable")
 }
 
 private class FakeLeaderboardRepository : LeaderboardRepository {

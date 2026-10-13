@@ -124,9 +124,9 @@ class PlayBillingRepository @Inject constructor(
         connectTimeout?.cancel()
         connectTimeout = scope.launch {
             delay(CONNECT_TIMEOUT_MILLIS)
-            if (_availability.value == BillingAvailability.CONNECTING) {
+            // Atomic: a setup callback that lands first (and writes AVAILABLE) can never be overwritten.
+            if (_availability.compareAndSet(BillingAvailability.CONNECTING, BillingAvailability.UNAVAILABLE)) {
                 Log.w(TAG, "Billing setup timed out")
-                _availability.value = BillingAvailability.UNAVAILABLE
             }
         }
     }

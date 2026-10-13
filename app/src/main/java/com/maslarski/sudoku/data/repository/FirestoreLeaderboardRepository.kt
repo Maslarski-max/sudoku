@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,7 +42,8 @@ class FirestoreLeaderboardRepository @Inject constructor(
 
     override suspend fun refresh(category: LeaderboardCategory, limit: Int): Result<Unit> = runCatching {
         authRepository.ensureSignedIn()
-        flushPending()
+        // Bound the whole backlog, not just each upload, so a stale queue can't hold the leaderboard spinner.
+        withTimeoutOrNull(NETWORK_TIMEOUT_MILLIS) { flushPending() }
         val snapshot = scores(category)
             .orderBy(FIELD_POINTS, Query.Direction.DESCENDING)
             .orderBy(FIELD_TIME, Query.Direction.ASCENDING)
@@ -89,6 +91,10 @@ class FirestoreLeaderboardRepository @Inject constructor(
 
     override suspend fun submit(score: Score): Result<Boolean> = runCatching {
         val category = score.category
+        if (score.isAnonymous) {
+            dao.upsertPending(score.toPending())
+            error("Not signed in; score queued for upload")
+        }
         val localBest = dao.get(category.id, score.uid)?.toScore()
         if (!score.isBetterThan(localBest)) return@runCatching false
 
@@ -126,10 +132,19 @@ class FirestoreLeaderboardRepository @Inject constructor(
 
     private suspend fun flushPending() {
         for (pending in dao.pending()) {
-            val score = pending.toScore()
+            val stored = pending.toScore()
+            val score = if (stored.isAnonymous) {
+                val uid = authRepository.currentUserId ?: continue
+                stored.copy(uid = uid, displayName = Score.displayNameFor(uid))
+            } else {
+                stored
+            }
             val docRef = scores(score.category).document(score.uid)
             runCatching { docRef.set(score.toDocument()).awaitNetwork() }
-                .onSuccess { dao.deletePending(pending.category) }
+                .onSuccess {
+                    dao.deletePending(pending.category)
+                    dao.upsertAll(listOf(score.toCache()))
+                }
                 .onFailure { if (it.isPermissionDenied()) dao.deletePending(pending.category) }
         }
     }
