@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.maslarski.sudoku.data.billing.PlayBillingRepository
@@ -51,8 +53,25 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): SudokuDatabase =
         Room.databaseBuilder(context, SudokuDatabase::class.java, "sudoku.db")
+            .addMigrations(MIGRATION_2_3)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
+
+    /** pending_scores: one slot per category -> one slot per (category, uid). */
+    private val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS pending_scores_new (" +
+                    "category TEXT NOT NULL, uid TEXT NOT NULL, displayName TEXT NOT NULL, gridSize INTEGER NOT NULL, " +
+                    "difficulty TEXT NOT NULL, timeMillis INTEGER NOT NULL, moves INTEGER NOT NULL, " +
+                    "mistakes INTEGER NOT NULL, points INTEGER NOT NULL, completedAtEpochMillis INTEGER NOT NULL, " +
+                    "PRIMARY KEY(category, uid))",
+            )
+            db.execSQL("INSERT INTO pending_scores_new SELECT * FROM pending_scores")
+            db.execSQL("DROP TABLE pending_scores")
+            db.execSQL("ALTER TABLE pending_scores_new RENAME TO pending_scores")
+        }
+    }
 
     @Provides
     fun provideSavedGameDao(db: SudokuDatabase): SavedGameDao = db.savedGameDao()

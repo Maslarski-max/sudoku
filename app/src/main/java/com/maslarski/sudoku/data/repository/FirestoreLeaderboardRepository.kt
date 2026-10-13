@@ -91,9 +91,8 @@ class FirestoreLeaderboardRepository @Inject constructor(
 
     override suspend fun submit(score: Score): Result<Boolean> = runCatching {
         val category = score.category
-        // One pending slot per category: never let a later, worse result evict a queued better one.
-        val pendingBest = pendingFor(category)
-            ?.takeIf { it.isAnonymous || score.isAnonymous || it.uid == score.uid }
+        // One pending slot per player per category: a later, worse result never evicts a queued better one.
+        val pendingBest = pendingBestFor(category, score.uid)
         if (score.isAnonymous) {
             if (score.isBetterThan(pendingBest)) dao.upsertPending(score.toPending())
             error("Not signed in; score queued for upload")
@@ -130,12 +129,19 @@ class FirestoreLeaderboardRepository @Inject constructor(
             dao.upsertPending(score.toPending())
             throw error
         }
-        if (uploaded) dao.deletePending(category.id)
+        if (uploaded) {
+            dao.deletePending(category.id, score.uid)
+            dao.deletePending(category.id, ANONYMOUS_UID)
+        }
         uploaded
     }
 
-    private suspend fun pendingFor(category: LeaderboardCategory): Score? =
-        dao.pending().firstOrNull { it.category == category.id }?.toScore()
+    /** Best queued score this submission competes with: the player's own slot plus the not-yet-signed-in slot. */
+    private suspend fun pendingBestFor(category: LeaderboardCategory, uid: String): Score? {
+        val own = dao.pending(category.id, uid)?.toScore()
+        val anonymous = if (uid == ANONYMOUS_UID) null else dao.pending(category.id, ANONYMOUS_UID)?.toScore()
+        return listOfNotNull(own, anonymous).minWithOrNull { a, b -> a.compareTo(b) }
+    }
 
     private suspend fun flushPending() {
         for (pending in dao.pending()) {
@@ -149,10 +155,10 @@ class FirestoreLeaderboardRepository @Inject constructor(
             val docRef = scores(score.category).document(score.uid)
             runCatching { docRef.set(score.toDocument()).awaitNetwork() }
                 .onSuccess {
-                    dao.deletePending(pending.category)
+                    dao.deletePending(pending.category, pending.uid)
                     dao.upsertAll(listOf(score.toCache()))
                 }
-                .onFailure { if (it.isPermissionDenied()) dao.deletePending(pending.category) }
+                .onFailure { if (it.isPermissionDenied()) dao.deletePending(pending.category, pending.uid) }
         }
     }
 
@@ -206,6 +212,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
     )
 
     private companion object {
+        private const val ANONYMOUS_UID = ""
         const val NETWORK_TIMEOUT_MILLIS = 15_000L
         const val COLLECTION_LEADERBOARDS = "leaderboards"
         const val COLLECTION_SCORES = "scores"
