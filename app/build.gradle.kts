@@ -65,6 +65,9 @@ android {
     buildTypes {
         debug {
             buildConfigField("boolean", "USE_FIREBASE_EMULATOR", "true")
+            // -PfakeBilling=true swaps Play Billing for an in-memory store (emulators without Google Play).
+            val fakeBilling = gradle.startParameter.projectProperties["fakeBilling"] == "true"
+            buildConfigField("boolean", "FAKE_BILLING", fakeBilling.toString())
         }
         release {
             isMinifyEnabled = true
@@ -72,6 +75,7 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = if (releaseSigning != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
             buildConfigField("boolean", "USE_FIREBASE_EMULATOR", "false")
+            buildConfigField("boolean", "FAKE_BILLING", "false")
         }
     }
 
