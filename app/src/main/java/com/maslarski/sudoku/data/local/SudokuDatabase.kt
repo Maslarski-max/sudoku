@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [SavedGameEntity::class, LeaderboardCacheEntity::class, PendingScoreEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class SudokuDatabase : RoomDatabase() {

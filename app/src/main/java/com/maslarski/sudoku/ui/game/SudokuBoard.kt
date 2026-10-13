@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -74,6 +75,9 @@ fun SudokuBoard(
     val colors = LocalBoardColors.current
     val textMeasurer = rememberTextMeasurer()
     val n = game.gridSize.size
+    // Digits repeat across the board, so each (text, style) is laid out once per cell size instead of
+    // once per cell per frame (18x18 = 324 cells plus notes).
+    val layoutCache = remember(n, colors) { TextLayoutCache(textMeasurer) }
 
     val hintRelated = remember(activeHint) { activeHint?.relatedIndices?.toSet() ?: emptySet() }
     val selectedPeers = remember(selectedIndex, game.gridSize) {
@@ -119,7 +123,7 @@ fun SudokuBoard(
                         activeHint = activeHint,
                         hintRelated = hintRelated,
                         colors = colors,
-                        textMeasurer = textMeasurer,
+                        layouts = layoutCache,
                     )
                 }
             }
@@ -135,11 +139,12 @@ private fun DrawScope.drawBoard(
     activeHint: Hint?,
     hintRelated: Set<Int>,
     colors: com.maslarski.sudoku.ui.theme.BoardColors,
-    textMeasurer: androidx.compose.ui.text.TextMeasurer,
+    layouts: TextLayoutCache,
 ) {
     val gridSize = game.gridSize
     val n = gridSize.size
     val cell = size.width / n
+    layouts.forCellSize(cell)
     val boxRows = gridSize.boxRows
     val boxCols = gridSize.boxCols
 
@@ -185,7 +190,7 @@ private fun DrawScope.drawBoard(
                 c.isError -> valueStyleError
                 else -> valueStyleEntered
             }
-            val layout = textMeasurer.measure(c.value.toString(), style)
+            val layout = layouts.get(c.value, style)
             drawText(
                 layout,
                 topLeft = Offset(x + (cell - layout.size.width) / 2f, y + (cell - layout.size.height) / 2f),
@@ -198,7 +203,7 @@ private fun DrawScope.drawBoard(
                 val k = v - 1
                 val nc = k % noteCols
                 val nr = k / noteCols
-                val layout = textMeasurer.measure(v.toString(), noteStyle)
+                val layout = layouts.get(v, noteStyle)
                 drawText(
                     layout,
                     topLeft = Offset(
@@ -231,6 +236,21 @@ private fun DrawScope.drawBoard(
         )
     }
     drawRect(colors.thickLine, style = Stroke(width = thick))
+}
+
+private class TextLayoutCache(private val measurer: androidx.compose.ui.text.TextMeasurer) {
+    private val layouts = HashMap<Pair<Int, TextStyle>, TextLayoutResult>()
+    private var cellSize = -1f
+
+    fun forCellSize(cell: Float) {
+        if (cell != cellSize) {
+            layouts.clear()
+            cellSize = cell
+        }
+    }
+
+    fun get(value: Int, style: TextStyle): TextLayoutResult =
+        layouts.getOrPut(value to style) { measurer.measure(value.toString(), style) }
 }
 
 private fun DrawScope.spOf(px: Float) = (px / density / fontScale).sp

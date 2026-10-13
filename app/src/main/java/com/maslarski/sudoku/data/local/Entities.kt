@@ -29,10 +29,10 @@ data class LeaderboardCacheEntity(
     val completedAtEpochMillis: Long,
 )
 
-/** Scores awaiting upload (offline at completion time). */
-@Entity(tableName = "pending_scores")
+/** Scores awaiting upload (offline at completion time); one slot per player per category, uid "" = not yet signed in. */
+@Entity(tableName = "pending_scores", primaryKeys = ["category", "uid"])
 data class PendingScoreEntity(
-    @PrimaryKey val category: String,
+    val category: String,
     val uid: String,
     val displayName: String,
     val gridSize: Int,

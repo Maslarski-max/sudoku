@@ -17,6 +17,8 @@ import com.maslarski.sudoku.domain.repository.LeaderboardRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -40,14 +42,15 @@ class FirestoreLeaderboardRepository @Inject constructor(
 
     override suspend fun refresh(category: LeaderboardCategory, limit: Int): Result<Unit> = runCatching {
         authRepository.ensureSignedIn()
-        flushPending()
+        // Bound the whole backlog, not just each upload, so a stale queue can't hold the leaderboard spinner.
+        withTimeoutOrNull(NETWORK_TIMEOUT_MILLIS) { flushPending() }
         val snapshot = scores(category)
             .orderBy(FIELD_POINTS, Query.Direction.DESCENDING)
             .orderBy(FIELD_TIME, Query.Direction.ASCENDING)
             .orderBy(FIELD_MOVES, Query.Direction.ASCENDING)
             .limit(limit.toLong())
             .get()
-            .await()
+            .awaitNetwork()
         val rows = snapshot.documents.mapNotNull { doc ->
             val uid = doc.getString(FIELD_UID) ?: return@mapNotNull null
             LeaderboardCacheEntity(
@@ -70,7 +73,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
         val uid = authRepository.currentUserId ?: return null
         dao.get(category.id, uid)?.let { return it.toScore() }
         return runCatching {
-            val doc = scores(category).document(uid).get().await()
+            val doc = scores(category).document(uid).get().awaitNetwork()
             if (!doc.exists()) return null
             Score(
                 uid = uid,
@@ -88,6 +91,13 @@ class FirestoreLeaderboardRepository @Inject constructor(
 
     override suspend fun submit(score: Score): Result<Boolean> = runCatching {
         val category = score.category
+        // One pending slot per player per category: a later, worse result never evicts a queued better one.
+        val pendingBest = pendingBestFor(category, score.uid)
+        if (score.isAnonymous) {
+            if (score.isBetterThan(pendingBest)) dao.upsertPending(score.toPending())
+            error("Not signed in; score queued for upload")
+        }
+        if (!score.isBetterThan(pendingBest)) return@runCatching false
         val localBest = dao.get(category.id, score.uid)?.toScore()
         if (!score.isBetterThan(localBest)) return@runCatching false
 
@@ -96,7 +106,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
 
         val docRef = scores(category).document(score.uid)
         val uploaded = runCatching {
-            val remote = docRef.get().await()
+            val remote = docRef.get().awaitNetwork()
             val remoteBest = remote.takeIf { it.exists() }?.let { doc ->
                 score.copy(
                     points = doc.getLong(FIELD_POINTS)?.toInt() ?: 0,
@@ -111,7 +121,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
                 remoteBest?.let { dao.upsertAll(listOf(it.toCache())) }
                 return@runCatching false
             }
-            docRef.set(score.toDocument()).await()
+            docRef.set(score.toDocument()).awaitNetwork()
             true
         }.getOrElse { error ->
             // Rules rejected it (not an improvement server-side): nothing to retry. Otherwise queue for later.
@@ -119,19 +129,45 @@ class FirestoreLeaderboardRepository @Inject constructor(
             dao.upsertPending(score.toPending())
             throw error
         }
-        if (uploaded) dao.deletePending(category.id)
+        if (uploaded) {
+            dao.deletePending(category.id, score.uid)
+            dao.deletePending(category.id, ANONYMOUS_UID)
+        }
         uploaded
+    }
+
+    /** Best queued score this submission competes with: the player's own slot plus the not-yet-signed-in slot. */
+    private suspend fun pendingBestFor(category: LeaderboardCategory, uid: String): Score? {
+        val own = dao.pending(category.id, uid)?.toScore()
+        val anonymous = if (uid == ANONYMOUS_UID) null else dao.pending(category.id, ANONYMOUS_UID)?.toScore()
+        return listOfNotNull(own, anonymous).minWithOrNull { a, b -> a.compareTo(b) }
     }
 
     private suspend fun flushPending() {
         for (pending in dao.pending()) {
-            val score = pending.toScore()
+            val stored = pending.toScore()
+            val score = if (stored.isAnonymous) {
+                val uid = authRepository.currentUserId ?: continue
+                stored.copy(uid = uid, displayName = Score.displayNameFor(uid))
+            } else {
+                stored
+            }
             val docRef = scores(score.category).document(score.uid)
-            runCatching { docRef.set(score.toDocument()).await() }
-                .onSuccess { dao.deletePending(pending.category) }
-                .onFailure { if (it.isPermissionDenied()) dao.deletePending(pending.category) }
+            runCatching { docRef.set(score.toDocument()).awaitNetwork() }
+                .onSuccess {
+                    dao.deletePending(pending.category, pending.uid)
+                    dao.upsertAll(listOf(score.toCache()))
+                }
+                .onFailure { if (it.isPermissionDenied()) dao.deletePending(pending.category, pending.uid) }
         }
     }
+
+    /**
+     * Firestore tasks never fail on their own while the device is offline (they wait for connectivity), so
+     * every remote call is bounded; a timeout surfaces as a normal failure (retry / pending queue).
+     */
+    private suspend fun <T> com.google.android.gms.tasks.Task<T>.awaitNetwork(): T =
+        withTimeout(NETWORK_TIMEOUT_MILLIS) { await() }
 
     private fun Throwable.isPermissionDenied(): Boolean =
         this is FirebaseFirestoreException && code == FirebaseFirestoreException.Code.PERMISSION_DENIED
@@ -176,6 +212,8 @@ class FirestoreLeaderboardRepository @Inject constructor(
     )
 
     private companion object {
+        private const val ANONYMOUS_UID = ""
+        const val NETWORK_TIMEOUT_MILLIS = 15_000L
         const val COLLECTION_LEADERBOARDS = "leaderboards"
         const val COLLECTION_SCORES = "scores"
         const val FIELD_UID = "uid"

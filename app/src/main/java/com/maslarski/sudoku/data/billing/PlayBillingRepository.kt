@@ -35,6 +35,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.lang.ref.WeakReference
@@ -70,6 +72,7 @@ class PlayBillingRepository @Inject constructor(
 
     private val productDetails = mutableMapOf<ProductId, ProductDetails>()
     private var activityRef: WeakReference<Activity>? = null
+    private var connectTimeout: Job? = null
 
     private val client: BillingClient = BillingClient.newBuilder(context)
         .setListener(this)
@@ -92,8 +95,10 @@ class PlayBillingRepository @Inject constructor(
 
     private fun connect() {
         _availability.value = BillingAvailability.CONNECTING
+        armConnectTimeout()
         client.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(result: BillingResult) {
+                connectTimeout?.cancel()
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                     _availability.value = BillingAvailability.AVAILABLE
                     scope.launch {
@@ -109,8 +114,21 @@ class PlayBillingRepository @Inject constructor(
             override fun onBillingServiceDisconnected() {
                 // enableAutoServiceReconnection() retries in the background; surface the state meanwhile.
                 _availability.value = BillingAvailability.CONNECTING
+                armConnectTimeout()
             }
         })
+    }
+
+    /** Play may never call back (no Play Store, stalled service); don't leave the store on "connecting" forever. */
+    private fun armConnectTimeout() {
+        connectTimeout?.cancel()
+        connectTimeout = scope.launch {
+            delay(CONNECT_TIMEOUT_MILLIS)
+            // Atomic: a setup callback that lands first (and writes AVAILABLE) can never be overwritten.
+            if (_availability.compareAndSet(BillingAvailability.CONNECTING, BillingAvailability.UNAVAILABLE)) {
+                Log.w(TAG, "Billing setup timed out")
+            }
+        }
     }
 
     private suspend fun loadProducts() {
@@ -239,5 +257,6 @@ class PlayBillingRepository @Inject constructor(
 
     private companion object {
         const val TAG = "PlayBilling"
+        const val CONNECT_TIMEOUT_MILLIS = 15_000L
     }
 }

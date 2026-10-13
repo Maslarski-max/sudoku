@@ -48,6 +48,9 @@ interface LeaderboardDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertPending(entity: PendingScoreEntity)
 
-    @Query("DELETE FROM pending_scores WHERE category = :category")
-    suspend fun deletePending(category: String)
+    @Query("SELECT * FROM pending_scores WHERE category = :category AND uid = :uid")
+    suspend fun pending(category: String, uid: String): PendingScoreEntity?
+
+    @Query("DELETE FROM pending_scores WHERE category = :category AND uid = :uid")
+    suspend fun deletePending(category: String, uid: String)
 }
