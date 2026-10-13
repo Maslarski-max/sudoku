@@ -5,6 +5,7 @@ import com.maslarski.sudoku.domain.repository.AuthRepository
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,8 +21,12 @@ class FirebaseAuthRepository @Inject constructor(
 
     override suspend fun ensureSignedIn(): String = signInMutex.withLock {
         auth.currentUser?.uid ?: run {
-            val result = auth.signInAnonymously().await()
+            val result = withTimeout(SIGN_IN_TIMEOUT_MILLIS) { auth.signInAnonymously().await() }
             result.user?.uid ?: error("Anonymous sign-in returned no user")
         }
+    }
+
+    private companion object {
+        const val SIGN_IN_TIMEOUT_MILLIS = 15_000L
     }
 }

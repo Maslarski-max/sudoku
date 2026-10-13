@@ -17,6 +17,7 @@ import com.maslarski.sudoku.domain.repository.LeaderboardRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,7 +48,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
             .orderBy(FIELD_MOVES, Query.Direction.ASCENDING)
             .limit(limit.toLong())
             .get()
-            .await()
+            .awaitNetwork()
         val rows = snapshot.documents.mapNotNull { doc ->
             val uid = doc.getString(FIELD_UID) ?: return@mapNotNull null
             LeaderboardCacheEntity(
@@ -70,7 +71,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
         val uid = authRepository.currentUserId ?: return null
         dao.get(category.id, uid)?.let { return it.toScore() }
         return runCatching {
-            val doc = scores(category).document(uid).get().await()
+            val doc = scores(category).document(uid).get().awaitNetwork()
             if (!doc.exists()) return null
             Score(
                 uid = uid,
@@ -96,7 +97,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
 
         val docRef = scores(category).document(score.uid)
         val uploaded = runCatching {
-            val remote = docRef.get().await()
+            val remote = docRef.get().awaitNetwork()
             val remoteBest = remote.takeIf { it.exists() }?.let { doc ->
                 score.copy(
                     points = doc.getLong(FIELD_POINTS)?.toInt() ?: 0,
@@ -111,7 +112,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
                 remoteBest?.let { dao.upsertAll(listOf(it.toCache())) }
                 return@runCatching false
             }
-            docRef.set(score.toDocument()).await()
+            docRef.set(score.toDocument()).awaitNetwork()
             true
         }.getOrElse { error ->
             // Rules rejected it (not an improvement server-side): nothing to retry. Otherwise queue for later.
@@ -127,11 +128,18 @@ class FirestoreLeaderboardRepository @Inject constructor(
         for (pending in dao.pending()) {
             val score = pending.toScore()
             val docRef = scores(score.category).document(score.uid)
-            runCatching { docRef.set(score.toDocument()).await() }
+            runCatching { docRef.set(score.toDocument()).awaitNetwork() }
                 .onSuccess { dao.deletePending(pending.category) }
                 .onFailure { if (it.isPermissionDenied()) dao.deletePending(pending.category) }
         }
     }
+
+    /**
+     * Firestore tasks never fail on their own while the device is offline (they wait for connectivity), so
+     * every remote call is bounded; a timeout surfaces as a normal failure (retry / pending queue).
+     */
+    private suspend fun <T> com.google.android.gms.tasks.Task<T>.awaitNetwork(): T =
+        withTimeout(NETWORK_TIMEOUT_MILLIS) { await() }
 
     private fun Throwable.isPermissionDenied(): Boolean =
         this is FirebaseFirestoreException && code == FirebaseFirestoreException.Code.PERMISSION_DENIED
@@ -176,6 +184,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
     )
 
     private companion object {
+        const val NETWORK_TIMEOUT_MILLIS = 15_000L
         const val COLLECTION_LEADERBOARDS = "leaderboards"
         const val COLLECTION_SCORES = "scores"
         const val FIELD_UID = "uid"

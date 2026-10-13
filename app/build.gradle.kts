@@ -91,7 +91,18 @@ android {
     }
 
     packaging {
-        resources.excludes += setOf("META-INF/AL2.0", "META-INF/LGPL2.1")
+        // Build-time-only metadata that otherwise ships inside the bundle (Firestore/gRPC .proto sources,
+        // Kotlin reflection builtins, per-library license/version stamps, coroutine debug probes).
+        resources.excludes += setOf(
+            "META-INF/AL2.0",
+            "META-INF/LGPL2.1",
+            "META-INF/*.version",
+            "META-INF/**/LICENSE.txt",
+            "META-INF/*.kotlin_module",
+            "kotlin/**",
+            "google/**/*.proto",
+            "DebugProbesKt.bin",
+        )
     }
 
     lint {
