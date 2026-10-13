@@ -93,6 +93,7 @@ class FirestoreLeaderboardRepository @Inject constructor(
         val category = score.category
         // One pending slot per category: never let a later, worse result evict a queued better one.
         val pendingBest = pendingFor(category)
+            ?.takeIf { it.isAnonymous || score.isAnonymous || it.uid == score.uid }
         if (score.isAnonymous) {
             if (score.isBetterThan(pendingBest)) dao.upsertPending(score.toPending())
             error("Not signed in; score queued for upload")
