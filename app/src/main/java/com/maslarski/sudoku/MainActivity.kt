@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.maslarski.sudoku.data.billing.PlayBillingRepository
+import com.maslarski.sudoku.domain.repository.BillingRepository
 import com.maslarski.sudoku.ui.navigation.SudokuNavHost
 import com.maslarski.sudoku.ui.theme.SudokuTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -13,7 +14,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    @Inject lateinit var billing: PlayBillingRepository
+    @Inject lateinit var billing: BillingRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -27,11 +28,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        billing.attachActivity(this)
+        (billing as? PlayBillingRepository)?.attachActivity(this)
     }
 
     override fun onStop() {
-        billing.detachActivity(this)
+        (billing as? PlayBillingRepository)?.detachActivity(this)
         super.onStop()
     }
 }
