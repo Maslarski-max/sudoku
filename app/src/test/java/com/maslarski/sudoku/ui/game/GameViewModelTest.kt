@@ -521,7 +521,7 @@ class GameViewModelTest {
     }
 
     @Test
-    fun `candidates toggle persists the setting and updates ui state`() = vmTest {
+    fun `non-premium candidates toggle opens upsell without persisting`() = vmTest {
         val vm = viewModel()
         settle()
         assertFalse(vm.uiState.value.showCandidates)
@@ -529,8 +529,49 @@ class GameViewModelTest {
         vm.toggleCandidates()
         settle()
 
+        assertFalse(vm.uiState.value.showCandidates)
+        assertTrue(vm.uiState.value.showCandidatesUpsell)
+        assertFalse(settings.state.value.showCandidates)
+        assertEquals(0, settings.candidateWrites)
+    }
+
+    @Test
+    fun `premium candidates toggle persists and enables display`() = vmTest {
+        lives.state.value = lives.state.value.copy(unlimited = true)
+        val vm = viewModel()
+        settle()
+
+        vm.toggleCandidates()
+        settle()
+
         assertTrue(vm.uiState.value.showCandidates)
         assertTrue(settings.state.value.showCandidates)
+        assertFalse(vm.uiState.value.showCandidatesUpsell)
+        assertEquals(1, settings.candidateWrites)
+    }
+
+    @Test
+    fun `saved candidates preference is hidden without premium`() = vmTest {
+        settings.state.value = settings.state.value.copy(showCandidates = true)
+        val vm = viewModel()
+        settle()
+
+        assertFalse(vm.uiState.value.showCandidates)
+        assertFalse(vm.uiState.value.showCandidatesUpsell)
+    }
+
+    @Test
+    fun `dismissing candidates upsell clears the flag`() = vmTest {
+        val vm = viewModel()
+        settle()
+        vm.toggleCandidates()
+        settle()
+
+        assertTrue(vm.uiState.value.showCandidatesUpsell)
+        vm.dismissCandidatesUpsell()
+        settle()
+
+        assertFalse(vm.uiState.value.showCandidatesUpsell)
     }
 
     @Test
@@ -698,6 +739,7 @@ private class FakeReviewPromptRepository(var completedCount: Int = 4) : ReviewPr
 
 private class FakeSettingsRepository : SettingsRepository {
     val state = MutableStateFlow(AppSettings())
+    var candidateWrites = 0
     override val settings: Flow<AppSettings> get() = state
     override suspend fun setSoundEnabled(enabled: Boolean) {
         state.value = state.value.copy(soundEnabled = enabled)
@@ -706,6 +748,7 @@ private class FakeSettingsRepository : SettingsRepository {
         state.value = state.value.copy(vibrationEnabled = enabled)
     }
     override suspend fun setShowCandidates(enabled: Boolean) {
+        candidateWrites++
         state.value = state.value.copy(showCandidates = enabled)
     }
     override suspend fun setTheme(theme: AppTheme) {

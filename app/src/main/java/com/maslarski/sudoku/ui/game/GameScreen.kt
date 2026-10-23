@@ -39,8 +39,10 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -264,6 +266,15 @@ fun GameScreen(
         )
     }
 
+    if (state.showCandidatesUpsell) {
+        CandidatesUpsellDialog(
+            onUpgrade = {
+                viewModel.dismissCandidatesUpsell()
+                onOpenStore()
+            },
+            onDismiss = viewModel::dismissCandidatesUpsell,
+        )
+    }
 }
 
 @Composable
@@ -370,7 +381,17 @@ private fun ActionRow(
             ) {
                 Icon(Icons.Default.GridOn, contentDescription = stringResource(R.string.game_candidates))
             }
-            Text(stringResource(R.string.game_candidates), style = MaterialTheme.typography.labelSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.game_candidates), style = MaterialTheme.typography.labelSmall)
+                if (state.lives?.unlimited != true) {
+                    Icon(
+                        Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -504,6 +525,29 @@ private fun HintDialog(
 @Composable
 private fun holidayName(value: Int): String =
     if (value in 1..holidayIconNames.size) stringResource(holidayIconNames[value - 1]) else value.toString()
+
+@Composable
+private fun CandidatesUpsellDialog(onUpgrade: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.Star,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp),
+            )
+        },
+        title = { Text(stringResource(R.string.candidates_upsell_title)) },
+        text = { Text(stringResource(R.string.candidates_upsell_body)) },
+        confirmButton = {
+            Button(onClick = onUpgrade) { Text(stringResource(R.string.candidates_upsell_upgrade)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.candidates_upsell_not_now)) }
+        },
+    )
+}
 
 @Composable
 private fun OutOfLivesDialog(

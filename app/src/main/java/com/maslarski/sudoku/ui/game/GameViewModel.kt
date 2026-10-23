@@ -25,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -59,6 +60,7 @@ data class GameUiState(
     val progressReset: Boolean = false,
     val showReviewPrompt: Boolean = false,
     val showCandidates: Boolean = false,
+    val showCandidatesUpsell: Boolean = false,
 ) {
     val isPaused: Boolean get() = pauseReason != PauseReason.NONE
     val score: ScoreBreakdown? get() = game?.let(ScoringRules::breakdown)
@@ -140,8 +142,10 @@ class GameViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            settingsRepository.settings.collect { settings ->
-                local.update { it.copy(showCandidates = settings.showCandidates) }
+            combine(settingsRepository.settings, livesRepository.lives) { settings, lives ->
+                settings.showCandidates && lives.unlimited
+            }.collect { enabled ->
+                local.update { it.copy(showCandidates = enabled) }
             }
         }
 
@@ -342,10 +346,16 @@ class GameViewModel @Inject constructor(
     fun toggleNotesMode() = local.update { it.copy(notesMode = !it.notesMode) }
 
     fun toggleCandidates() {
+        if (local.value.lives?.unlimited != true) {
+            local.update { it.copy(showCandidatesUpsell = true) }
+            return
+        }
         val enabled = !local.value.showCandidates
         local.update { it.copy(showCandidates = enabled) }
         viewModelScope.launch { settingsRepository.setShowCandidates(enabled) }
     }
+
+    fun dismissCandidatesUpsell() = local.update { it.copy(showCandidatesUpsell = false) }
 
     fun enterNumber(value: Int) {
         val state = local.value
