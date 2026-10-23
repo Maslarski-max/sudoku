@@ -34,6 +34,7 @@ import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -45,10 +46,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -56,6 +59,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.activity.compose.LocalActivity
+import com.google.android.play.core.ktx.launchReview
+import com.google.android.play.core.ktx.requestReview
+import com.google.android.play.core.review.ReviewManagerFactory
 import com.maslarski.sudoku.R
 import com.maslarski.sudoku.domain.engine.ScoreBreakdown
 import com.maslarski.sudoku.domain.engine.ScoringRules
@@ -65,6 +72,7 @@ import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.ui.components.difficultyLabel
 import com.maslarski.sudoku.ui.components.formatDuration
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -165,6 +173,11 @@ fun GameScreen(
     if (game == null) return
 
     when {
+        state.showReviewPrompt -> ReviewDialog(
+            onRateNow = viewModel::onReviewRateNow,
+            onLater = viewModel::onReviewLater,
+            onNever = viewModel::onReviewNever,
+        )
         game.isComplete -> CompletionDialog(
             game = game,
             score = ScoringRules.breakdown(game),
@@ -174,6 +187,8 @@ fun GameScreen(
             onHome = { viewModel.discardCompletedGame(); onBack() },
         )
         state.pauseReason == PauseReason.OUT_OF_LIVES -> OutOfLivesDialog(
+            secondsLeft = state.outOfLivesSecondsLeft,
+            progressReset = state.progressReset,
             onOpenStore = onOpenStore,
             onQuit = onBack,
         )
@@ -336,13 +351,62 @@ private fun HintDialog(hint: Hint, gridSize: GridSize, onApply: () -> Unit, onDi
 }
 
 @Composable
-private fun OutOfLivesDialog(onOpenStore: () -> Unit, onQuit: () -> Unit) {
+private fun OutOfLivesDialog(
+    secondsLeft: Int?,
+    progressReset: Boolean,
+    onOpenStore: () -> Unit,
+    onQuit: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = {},
         title = { Text(stringResource(R.string.lives_out_title)) },
-        text = { Text(stringResource(R.string.lives_out_message)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                when {
+                    progressReset -> Text(stringResource(R.string.lives_progress_reset))
+                    secondsLeft != null -> {
+                        Text(stringResource(R.string.lives_save_progress, formatDuration(secondsLeft * 1_000L)))
+                        LinearProgressIndicator(progress = { secondsLeft / 60f }, modifier = Modifier.fillMaxWidth())
+                    }
+                    else -> Text(stringResource(R.string.lives_out_message))
+                }
+            }
+        },
         confirmButton = { Button(onClick = onOpenStore) { Text(stringResource(R.string.lives_go_to_store)) } },
         dismissButton = { TextButton(onClick = onQuit) { Text(stringResource(R.string.game_quit)) } },
+    )
+}
+
+@Composable
+private fun ReviewDialog(onRateNow: () -> Unit, onLater: () -> Unit, onNever: () -> Unit) {
+    val context = LocalContext.current
+    val activity = LocalActivity.current
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = onLater,
+        title = { Text(stringResource(R.string.review_title)) },
+        text = { Text(stringResource(R.string.review_message)) },
+        confirmButton = {
+            Button(onClick = {
+                onRateNow()
+                scope.launch {
+                    try {
+                        val host = activity ?: return@launch
+                        val manager = ReviewManagerFactory.create(context)
+                        val info = manager.requestReview()
+                        manager.launchReview(host, info)
+                    } catch (_: Exception) {
+                        // Review flow is unavailable for sideloaded installs and some Play states.
+                    }
+                }
+            }) { Text(stringResource(R.string.review_rate_now)) }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onLater) { Text(stringResource(R.string.review_later)) }
+                TextButton(onClick = onNever) { Text(stringResource(R.string.review_never)) }
+            }
+        },
     )
 }
 

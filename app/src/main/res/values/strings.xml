@@ -69,6 +69,8 @@
     <!-- Lives -->
     <string name="lives_out_title">Out of lives</string>
     <string name="lives_out_message">Every 3 mistakes cost 1 Life. Lives don\'t regenerate — get more in the store to keep playing.</string>
+    <string name="lives_save_progress">Save your progress! Buy lives within %1$s to continue this puzzle.</string>
+    <string name="lives_progress_reset">Time\'s up — this puzzle was reset. Get more lives in the store to play again.</string>
     <string name="lives_unlimited">Unlimited lives</string>
     <string name="lives_go_to_store">Open store</string>
     <plurals name="lives_remaining">
@@ -93,6 +95,13 @@
     <string name="complete_new_game">New game</string>
     <string name="complete_view_leaderboard">Leaderboard</string>
     <string name="complete_home">Home</string>
+
+    <!-- Review -->
+    <string name="review_title">Enjoying Sudoku?</string>
+    <string name="review_message">Rate us on Google Play and get +1 Life as a thank-you.</string>
+    <string name="review_rate_now">Rate now</string>
+    <string name="review_later">Later</string>
+    <string name="review_never">Never</string>
 
     <!-- Leaderboard -->
     <string name="leaderboard_title">Leaderboard</string>

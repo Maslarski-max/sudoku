@@ -15,6 +15,7 @@ import com.maslarski.sudoku.data.local.LeaderboardDao
 import com.maslarski.sudoku.data.local.SavedGameDao
 import com.maslarski.sudoku.data.local.SudokuDatabase
 import com.maslarski.sudoku.data.repository.DataStoreLivesRepository
+import com.maslarski.sudoku.data.repository.DataStoreReviewPromptRepository
 import com.maslarski.sudoku.data.repository.FirebaseAuthRepository
 import com.maslarski.sudoku.data.repository.FirestoreLeaderboardRepository
 import com.maslarski.sudoku.data.repository.RoomGameRepository
@@ -26,6 +27,7 @@ import com.maslarski.sudoku.domain.repository.BillingRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
+import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -110,6 +112,7 @@ object AppModule {
 abstract class RepositoryModule {
     @Binds abstract fun bindGameRepository(impl: RoomGameRepository): GameRepository
     @Binds abstract fun bindLivesRepository(impl: DataStoreLivesRepository): LivesRepository
+    @Binds abstract fun bindReviewPromptRepository(impl: DataStoreReviewPromptRepository): ReviewPromptRepository
     @Binds abstract fun bindAuthRepository(impl: FirebaseAuthRepository): AuthRepository
     @Binds abstract fun bindLeaderboardRepository(impl: FirestoreLeaderboardRepository): LeaderboardRepository
     @Binds abstract fun bindBillingRepository(impl: PlayBillingRepository): BillingRepository

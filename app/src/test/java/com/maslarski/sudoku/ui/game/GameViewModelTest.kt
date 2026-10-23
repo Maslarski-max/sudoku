@@ -6,6 +6,7 @@ import com.maslarski.sudoku.domain.engine.GameEngine
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.Cell
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.LeaderboardCategory
@@ -16,6 +17,7 @@ import com.maslarski.sudoku.domain.repository.AuthRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
+import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
 import com.maslarski.sudoku.domain.usecase.SubmitScoreUseCase
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +48,7 @@ class GameViewModelTest {
     private val games = FakeGameRepository()
     private val lives = FakeLivesRepository()
     private val leaderboard = FakeLeaderboardRepository()
+    private val reviewPrompt = FakeReviewPromptRepository()
     private val store = ViewModelStore()
 
     @Before
@@ -77,6 +80,7 @@ class GameViewModelTest {
         engine = GameEngine(),
         hintEngine = HintEngine(),
         submitScore = submitScore,
+        reviewPrompt = reviewPrompt,
     ).also { store.put("game", it) }
 
     /** The timer ticks forever, so advance a bounded amount of virtual time instead of idling. */
@@ -173,6 +177,29 @@ class GameViewModelTest {
     }
 
     @Test
+    fun `request hint targets selected cell and preserves selection`() = vmTest {
+        val vm = viewModel()
+        settle()
+        val nextIndex = HintEngine().nextHint(initial).index
+        val selected = initial.emptyCells().first { it != nextIndex }
+        vm.selectCell(selected)
+        vm.requestHint()
+        assertEquals(selected, vm.uiState.value.selectedIndex)
+        assertEquals(selected, vm.uiState.value.activeHint?.index)
+        assertEquals(initial.puzzle.solution[selected], vm.uiState.value.activeHint?.value)
+    }
+
+    @Test
+    fun `request hint without selection selects the next hint cell`() = vmTest {
+        val vm = viewModel()
+        settle()
+        val expected = HintEngine().nextHint(initial).index
+        vm.requestHint()
+        assertEquals(expected, vm.uiState.value.selectedIndex)
+        assertEquals(expected, vm.uiState.value.activeHint?.index)
+    }
+
+    @Test
     fun `premium players are not limited to three hints`() = vmTest {
         lives.state.value = Lives(count = 0, unlimited = true)
         val vm = viewModel()
@@ -199,6 +226,50 @@ class GameViewModelTest {
         settle()
         assertEquals(PauseReason.NONE, vm.uiState.value.pauseReason)
         assertFalse(vm.uiState.value.outOfLives)
+    }
+
+    @Test
+    fun `buying lives during countdown resumes without changing the board`() = vmTest {
+        lives.state.value = Lives(count = 0, unlimited = false)
+        val vm = viewModel()
+        dispatcher.scheduler.runCurrent()
+        assertEquals(60, vm.uiState.value.outOfLivesSecondsLeft)
+        val before = vm.uiState.value.game!!.cells
+
+        dispatcher.scheduler.advanceTimeBy(30_000L)
+        dispatcher.scheduler.runCurrent()
+        assertEquals(30, vm.uiState.value.outOfLivesSecondsLeft)
+        lives.addLives(5)
+        settle()
+
+        assertEquals(PauseReason.NONE, vm.uiState.value.pauseReason)
+        assertNull(vm.uiState.value.outOfLivesSecondsLeft)
+        assertEquals(before, vm.uiState.value.game?.cells)
+    }
+
+    @Test
+    fun `countdown reset restores givens and preserves hint usage`() = vmTest {
+        val enteredIndex = initial.firstEmpty()
+        initial = initial.copy(
+            cells = initial.cells.toMutableList().also {
+                it[enteredIndex] = Cell(value = initial.puzzle.solution[enteredIndex])
+            },
+            hintsUsed = 2,
+        )
+        games.saved[GridSize.NINE] = initial
+        lives.state.value = Lives(count = 0, unlimited = false)
+        val vm = viewModel()
+        settle()
+        dispatcher.scheduler.advanceTimeBy(61_000L)
+        dispatcher.scheduler.runCurrent()
+
+        val reset = vm.uiState.value.game!!
+        assertEquals(initial.puzzle.givens.toList(), reset.cells.map { it.value })
+        assertEquals(2, reset.hintsUsed)
+        assertTrue(vm.uiState.value.progressReset)
+        assertNull(vm.uiState.value.outOfLivesSecondsLeft)
+        assertEquals(-1, vm.uiState.value.selectedIndex)
+        assertNull(vm.uiState.value.activeHint)
     }
 
     @Test
@@ -229,6 +300,16 @@ class GameViewModelTest {
         assertTrue(submitted.timeMillis >= 1L)
         assertEquals(GridSize.NINE, submitted.gridSize)
         assertEquals(Difficulty.EASY, submitted.difficulty)
+    }
+
+    @Test
+    fun `fifth completed puzzle shows review prompt`() = vmTest {
+        val vm = viewModel()
+        settle()
+        completeBoard(vm)
+
+        assertEquals(5, reviewPrompt.completedCount)
+        assertTrue(vm.uiState.value.showReviewPrompt)
     }
 
     @Test
@@ -294,6 +375,16 @@ private class FakeLivesRepository : LivesRepository {
     }
     override suspend fun addLives(count: Int) = state.update { it.copy(count = it.count + count) }
     override suspend fun setUnlimited(unlimited: Boolean) = state.update { it.copy(unlimited = unlimited) }
+}
+
+private class FakeReviewPromptRepository(var completedCount: Int = 4) : ReviewPromptRepository {
+    override suspend fun onPuzzleCompleted(): Boolean {
+        completedCount++
+        return completedCount >= 5
+    }
+    override suspend fun rateNow() = Unit
+    override suspend fun later() = Unit
+    override suspend fun never() = Unit
 }
 
 private class FakeAuthRepository : AuthRepository {

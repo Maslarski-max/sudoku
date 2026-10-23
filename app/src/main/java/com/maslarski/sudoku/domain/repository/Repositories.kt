@@ -37,6 +37,13 @@ interface LivesRepository {
     suspend fun setUnlimited(unlimited: Boolean)
 }
 
+interface ReviewPromptRepository {
+    suspend fun onPuzzleCompleted(): Boolean
+    suspend fun rateNow()
+    suspend fun later()
+    suspend fun never()
+}
+
 interface AuthRepository {
     /** Signs in anonymously if needed and returns the stable user id. */
     suspend fun ensureSignedIn(): String

@@ -1,6 +1,8 @@
 package com.maslarski.sudoku.domain.model
 
 object GameRules {
+    const val OUT_OF_LIVES_COUNTDOWN_SECONDS = 60
+
     /** Free hints per game; players with unlimited lives (premium) are not limited. */
     const val MAX_FREE_HINTS = 3
 

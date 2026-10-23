@@ -14,6 +14,7 @@ import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
+import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import com.maslarski.sudoku.domain.usecase.SubmitScoreUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
@@ -51,6 +52,9 @@ data class GameUiState(
     val lives: Lives? = null,
     val scoreSubmission: ScoreSubmission = ScoreSubmission.NotSubmitted,
     val missing: Boolean = false,
+    val outOfLivesSecondsLeft: Int? = null,
+    val progressReset: Boolean = false,
+    val showReviewPrompt: Boolean = false,
 ) {
     val isPaused: Boolean get() = pauseReason != PauseReason.NONE
     val score: ScoreBreakdown? get() = game?.let(ScoringRules::breakdown)
@@ -69,6 +73,7 @@ class GameViewModel @Inject constructor(
     private val engine: GameEngine,
     private val hintEngine: HintEngine,
     private val submitScore: SubmitScoreUseCase,
+    private val reviewPrompt: ReviewPromptRepository,
 ) : ViewModel() {
 
     private val gridSize: GridSize = GridSize.entries.first { it.size == checkNotNull(savedStateHandle.get<Int>("gridSize")) }
@@ -78,6 +83,8 @@ class GameViewModel @Inject constructor(
     val uiState: StateFlow<GameUiState> = local.asStateFlow()
 
     private var timerJob: Job? = null
+    private var outOfLivesCountdownJob: Job? = null
+    private var completionHandled = false
 
     init {
         viewModelScope.launch {
@@ -90,6 +97,7 @@ class GameViewModel @Inject constructor(
                     local.update { it.copy(scoreSubmission = ScoreSubmission.Submitted) }
                 } else {
                     startTimer()
+                    startOutOfLivesCountdownIfNeeded()
                 }
             }
         }
@@ -104,13 +112,26 @@ class GameViewModel @Inject constructor(
         // Lives are written into the same state as the pause reason so the two can never disagree.
         viewModelScope.launch {
             livesRepository.lives.collect { lives ->
+                var becameOutOfLives = false
+                val canPlayAgain = lives.canPlay
                 local.update { s ->
                     val next = s.copy(lives = lives)
-                    when {
+                    val updated = when {
                         !lives.canPlay && s.game?.isComplete != true -> next.copy(pauseReason = PauseReason.OUT_OF_LIVES)
-                        lives.canPlay && s.pauseReason == PauseReason.OUT_OF_LIVES -> next.copy(pauseReason = PauseReason.NONE)
+                        lives.canPlay && s.pauseReason == PauseReason.OUT_OF_LIVES ->
+                            next.copy(pauseReason = PauseReason.NONE, outOfLivesSecondsLeft = null, progressReset = false)
                         else -> next
                     }
+                    becameOutOfLives = s.pauseReason != PauseReason.OUT_OF_LIVES &&
+                        updated.pauseReason == PauseReason.OUT_OF_LIVES
+                    updated
+                }
+                if (canPlayAgain) {
+                    outOfLivesCountdownJob?.cancel()
+                    outOfLivesCountdownJob = null
+                    local.update { it.copy(outOfLivesSecondsLeft = null, progressReset = false) }
+                } else if (becameOutOfLives || local.value.pauseReason == PauseReason.OUT_OF_LIVES) {
+                    startOutOfLivesCountdownIfNeeded()
                 }
             }
         }
@@ -131,6 +152,40 @@ class GameViewModel @Inject constructor(
                     local.update { it.copy(game = engine.tick(game, now - last, now)) }
                 }
                 last = now
+            }
+        }
+    }
+
+    private fun startOutOfLivesCountdownIfNeeded() {
+        val state = local.value
+        if (state.pauseReason != PauseReason.OUT_OF_LIVES || state.game?.isComplete != false) return
+        if (outOfLivesCountdownJob?.isActive == true) return
+        local.update {
+            it.copy(outOfLivesSecondsLeft = GameRules.OUT_OF_LIVES_COUNTDOWN_SECONDS, progressReset = false)
+        }
+        outOfLivesCountdownJob = viewModelScope.launch {
+            repeat(GameRules.OUT_OF_LIVES_COUNTDOWN_SECONDS) {
+                delay(1_000L)
+                val current = local.value
+                if (current.pauseReason != PauseReason.OUT_OF_LIVES || current.game?.isComplete != false) return@launch
+                val secondsLeft = (current.outOfLivesSecondsLeft ?: GameRules.OUT_OF_LIVES_COUNTDOWN_SECONDS) - 1
+                if (secondsLeft <= 0) {
+                    val game = current.game ?: return@launch
+                    val reset = GameState.fromPuzzle(game.puzzle, System.currentTimeMillis())
+                        .copy(hintsUsed = game.hintsUsed)
+                    local.update {
+                        it.copy(
+                            game = reset,
+                            selectedIndex = -1,
+                            activeHint = null,
+                            outOfLivesSecondsLeft = null,
+                            progressReset = true,
+                        )
+                    }
+                    outOfLivesCountdownJob = null
+                    return@launch
+                }
+                local.update { it.copy(outOfLivesSecondsLeft = secondsLeft) }
             }
         }
     }
@@ -196,9 +251,13 @@ class GameViewModel @Inject constructor(
         val state = local.value
         val game = state.game ?: return
         if (state.isPaused || game.isComplete || !state.canUseHint) return
-        val hint = hintEngine.nextHint(game)
+        val targeted = if (state.selectedIndex >= 0) hintEngine.hintFor(game, state.selectedIndex) else null
+        val hint = targeted ?: hintEngine.nextHint(game)
         local.update {
-            it.copy(activeHint = hint, selectedIndex = if (hint.index >= 0) hint.index else it.selectedIndex)
+            it.copy(
+                activeHint = hint,
+                selectedIndex = if (targeted != null) it.selectedIndex else if (hint.index >= 0) hint.index else it.selectedIndex,
+            )
         }
     }
 
@@ -231,14 +290,30 @@ class GameViewModel @Inject constructor(
     // endregion
 
     private fun onCompleted(state: GameState) {
+        if (completionHandled) return
+        completionHandled = true
         timerJob?.cancel()
         viewModelScope.launch {
             gameRepository.save(state)
+            if (reviewPrompt.onPuzzleCompleted()) local.update { it.copy(showReviewPrompt = true) }
             val submission = submitScore(state).fold(
                 onSuccess = { uploaded -> if (uploaded) ScoreSubmission.Submitted else ScoreSubmission.NotPersonalBest },
                 onFailure = { ScoreSubmission.Pending },
             )
             local.update { it.copy(scoreSubmission = submission) }
+        }
+    }
+
+    fun onReviewRateNow() = resolveReviewPrompt { reviewPrompt.rateNow() }
+
+    fun onReviewLater() = resolveReviewPrompt { reviewPrompt.later() }
+
+    fun onReviewNever() = resolveReviewPrompt { reviewPrompt.never() }
+
+    private fun resolveReviewPrompt(action: suspend () -> Unit) {
+        viewModelScope.launch {
+            action()
+            local.update { it.copy(showReviewPrompt = false) }
         }
     }
 
@@ -250,6 +325,7 @@ class GameViewModel @Inject constructor(
 
     override fun onCleared() {
         timerJob?.cancel()
+        outOfLivesCountdownJob?.cancel()
         super.onCleared()
     }
 
