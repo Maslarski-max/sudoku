@@ -5,6 +5,7 @@ import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Lives
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
@@ -16,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -217,26 +219,67 @@ class HomeViewModelTest {
         collector.cancel()
     }
 
+    @Test
+    fun `variant selection uses its own saved slot and classic selection clears it`() = runTest(dispatcher) {
+        val savedVariant = SavedGameSummary(
+            GridSize.NINE,
+            Difficulty.HARD,
+            elapsedMillis = 12_000L,
+            filledFraction = 0.5f,
+            lastPlayedEpochMillis = 20L,
+            variant = Variant.SAMURAI,
+        )
+        games.variantSummaries.value = listOf(savedVariant)
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        runCurrent()
+
+        vm.selectVariant(Variant.SAMURAI)
+        runCurrent()
+        assertEquals(Variant.SAMURAI, vm.uiState.value.variant)
+        assertEquals(Variant.SAMURAI.slotId, vm.uiState.value.selectedSlotId)
+        assertEquals(savedVariant, vm.uiState.value.savedForSelection)
+
+        vm.selectGridSize(GridSize.FIFTEEN)
+        runCurrent()
+        assertEquals(null, vm.uiState.value.variant)
+        assertEquals(GridSize.FIFTEEN.size, vm.uiState.value.selectedSlotId)
+        assertEquals(null, vm.uiState.value.savedForSelection)
+        collector.cancel()
+    }
+
     private fun CoroutineScope.launchCollect(vm: HomeViewModel) = launch { vm.uiState.collect {} }
 }
 
 private class FakeGameRepository : GameRepository {
     val saved = MutableStateFlow<Map<GridSize, GameState>>(emptyMap())
-    override fun observeSavedGames(): Flow<List<SavedGameSummary>> = saved.map { m ->
+    val variantSaved = MutableStateFlow<Map<Int, GameState>>(emptyMap())
+    val variantSummaries = MutableStateFlow<List<SavedGameSummary>>(emptyList())
+    override fun observeSavedGames(): Flow<List<SavedGameSummary>> = combine(saved, variantSaved, variantSummaries) { m, variants, summaries ->
         m.values.map {
             SavedGameSummary(it.gridSize, it.difficulty, it.elapsedMillis, 0f, it.lastPlayedEpochMillis)
-        }
+        } + variants.values.map {
+            SavedGameSummary(it.gridSize, it.difficulty, it.elapsedMillis, 0f, it.lastPlayedEpochMillis, it.variant)
+        } + summaries
     }
     override suspend fun load(gridSize: GridSize): GameState? = saved.value[gridSize]
+    override suspend fun loadSlot(slotId: Int): GameState? =
+        if (Variant.fromSlotId(slotId) != null) variantSaved.value[slotId]
+        else GridSize.entries.firstOrNull { it.size == slotId }?.let { load(it) }
     var failNextSave = false
     override suspend fun save(state: GameState) {
         if (failNextSave) {
             failNextSave = false
             throw IllegalStateException("disk full")
         }
-        saved.update { it + (state.gridSize to state) }
+        if (state.variant == null) saved.update { it + (state.gridSize to state) }
+        else variantSaved.update { it + (state.slotId to state) }
     }
-    override suspend fun delete(gridSize: GridSize) = saved.update { it - gridSize }
+    override suspend fun delete(gridSize: GridSize) { saved.update { it - gridSize } }
+    override suspend fun deleteSlot(slotId: Int) {
+        if (Variant.fromSlotId(slotId) != null) variantSaved.update { it - slotId }
+        else GridSize.entries.firstOrNull { it.size == slotId }?.let { saved.update { map -> map - it } }
+    }
 }
 
 private class FakeLivesRepository : LivesRepository {

@@ -12,17 +12,27 @@
     <string name="home_title">Sudoku</string>
     <string name="home_subtitle">Pick a grid size and difficulty</string>
     <string name="home_grid_size">Grid size</string>
+    <string name="home_special_variations">Special Variations</string>
+    <string name="variant_samurai">Samurai</string>
+    <string name="variant_samurai_description">Five overlapping 9×9 puzzles</string>
+    <string name="variant_flower">Flower</string>
+    <string name="variant_flower_description">Five overlapping 9×9 grids in a flower</string>
+    <string name="variant_outside">Outside</string>
+    <string name="variant_outside_description">Outside clues rule out digits along each edge</string>
     <string name="home_difficulty">Difficulty</string>
     <string name="home_new_game">New game</string>
     <string name="home_continue">Continue</string>
     <string name="home_continue_description">%1$s · %2$s · %3$s</string>
+    <string name="home_continue_description_variant">%1$s · %2$s · %3$s</string>
     <string name="home_generating">Generating a %1$d×%1$d puzzle…</string>
+    <string name="home_generating_variant">Generating %1$s…</string>
     <string name="home_generating_hint">Large grids can take a few seconds.</string>
     <string name="home_ad_free" formatted="false">100% ad-free</string>
     <string name="home_saved_games">Saved games</string>
     <string name="home_no_saved_games">No games in progress</string>
     <string name="home_replace_saved_title">Replace saved game?</string>
     <string name="home_replace_saved_message">You already have a %1$d×%1$d game in progress. Starting a new one will discard it and cost 1 Life.</string>
+    <string name="home_replace_variant_message">You already have a %1$s game in progress. Starting a new one will discard it and cost 1 Life.</string>
     <string name="home_replace_saved_confirm">Start new</string>
     <string name="home_replace_blocked_title">Not enough lives</string>
     <string name="home_replace_blocked_message">Replacing a game in progress costs 1 Life, and you have none left. Your saved game has been kept.</string>
@@ -36,6 +46,7 @@
 
     <!-- Game -->
     <string name="game_title">%1$d×%1$d · %2$s</string>
+    <string name="game_title_variant">%1$s · %2$s</string>
     <string name="game_mistakes">Mistakes: %1$d</string>
     <string name="game_moves">Moves: %1$d</string>
     <string name="game_score">Score: %1$d</string>
@@ -96,6 +107,7 @@
     <string name="complete_score_submitted">Score submitted to the leaderboard.</string>
     <string name="complete_score_pending">Score will be submitted when you are online.</string>
     <string name="complete_score_not_best">Your personal best in this category still stands.</string>
+    <string name="complete_local_only">Variation scores are kept on this device.</string>
     <string name="complete_new_game">New game</string>
     <string name="complete_view_leaderboard">Leaderboard</string>
     <string name="complete_home">Home</string>
@@ -155,6 +167,9 @@
     <string name="settings_close">Close</string>
     <string name="settings_version">Version %1$s</string>
     <string name="settings_rule_standard">Each row, column and box contains every number 1..N exactly once.</string>
+    <string name="settings_rule_samurai">Samurai has five overlapping 9×9 grids. Shared cells must satisfy every overlapping row, column and box.</string>
+    <string name="settings_rule_flower">Flower has five overlapping 9×9 grids. Shared cells must satisfy every overlapping row, column and box.</string>
+    <string name="settings_rule_outside">Outside clues show digits among the first three cells from that edge; those digits do not appear in the remaining six cells.</string>
     <string name="settings_grid_shape">Grid %1$d×%1$d: boxes are %2$d×%3$d.</string>
     <string name="settings_rule_enter">Select a cell and tap a number to fill it.</string>
     <string name="settings_rule_notes">Use Notes mode to add pencil marks.</string>

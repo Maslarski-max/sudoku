@@ -1,5 +1,6 @@
 package com.maslarski.sudoku.ui.game
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -83,10 +84,12 @@ import com.maslarski.sudoku.R
 import com.maslarski.sudoku.domain.engine.ScoreBreakdown
 import com.maslarski.sudoku.domain.engine.ScoringRules
 import com.maslarski.sudoku.domain.engine.SudokuSolver
+import com.maslarski.sudoku.domain.engine.UnitSolver
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.ui.components.difficultyLabel
 import com.maslarski.sudoku.ui.components.formatDuration
 import kotlinx.coroutines.CoroutineScope
@@ -127,7 +130,14 @@ fun GameScreen(
             TopAppBar(
                 title = {
                     if (game != null) {
-                        Text(stringResource(R.string.game_title, game.gridSize.size, difficultyLabel(game.difficulty)))
+                        val title = game.variant?.let { variant ->
+                            stringResource(
+                                R.string.game_title_variant,
+                                stringResource(variantName(variant)),
+                                difficultyLabel(game.difficulty),
+                            )
+                        } ?: stringResource(R.string.game_title, game.gridSize.size, difficultyLabel(game.difficulty))
+                        Text(title)
                     }
                 },
                 navigationIcon = {
@@ -157,14 +167,22 @@ fun GameScreen(
             }
             return@Scaffold
         }
-        val candidateMasks = remember(game.cells, state.showCandidates) {
+        val candidateMasks = remember(game.cells, state.showCandidates, game.variant, game.puzzle.outsideClues) {
             if (!state.showCandidates) {
                 null
             } else {
                 val grid = game.valuesArray()
-                val solver = SudokuSolver(game.gridSize)
-                IntArray(game.cells.size) { index ->
-                    if (game.cells[index].isEmpty) solver.candidates(grid, index) else 0
+                val topology = game.topology
+                if (game.variant == null) {
+                    val solver = SudokuSolver(game.gridSize)
+                    IntArray(game.cells.size) { index ->
+                        if (topology.active[index] && game.cells[index].isEmpty) solver.candidates(grid, index) else 0
+                    }
+                } else {
+                    val solver = UnitSolver(topology, game.puzzle.outsideClues?.exclusionMasks(topology))
+                    IntArray(game.cells.size) { index ->
+                        if (topology.active[index] && game.cells[index].isEmpty) solver.candidates(grid, index) else 0
+                    }
                 }
             }
         }
@@ -235,7 +253,7 @@ fun GameScreen(
         )
         state.activeHint != null -> HintDialog(
             hint = state.activeHint!!,
-            gridSize = game.gridSize,
+            gridWidth = game.topology.width,
             onApply = viewModel::applyHint,
             onDismiss = viewModel::dismissHint,
         )
@@ -401,9 +419,9 @@ private fun NumberPad(
 }
 
 @Composable
-private fun HintDialog(hint: Hint, gridSize: GridSize, onApply: () -> Unit, onDismiss: () -> Unit) {
-    val row = hint.index / gridSize.size + 1
-    val col = hint.index % gridSize.size + 1
+private fun HintDialog(hint: Hint, gridWidth: Int, onApply: () -> Unit, onDismiss: () -> Unit) {
+    val row = hint.index / gridWidth + 1
+    val col = hint.index % gridWidth + 1
     val text = when (hint) {
         is Hint.NakedSingle -> stringResource(R.string.hint_naked_single, row, col, hint.value)
         is Hint.HiddenSingle -> when (hint.unit) {
@@ -519,7 +537,7 @@ private fun CompletionDialog(
                 Spacer(Modifier.height(8.dp))
                 Text(stringResource(R.string.complete_score_total, score.total), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    stringResource(R.string.complete_score_base, score.correctEntries, ScoringRules.basePoints(game.gridSize), score.basePoints),
+                    stringResource(R.string.complete_score_base, score.correctEntries, ScoringRules.basePoints(game), score.basePoints),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 if (score.comboBonus > 0) {
@@ -548,6 +566,7 @@ private fun CompletionDialog(
                     ScoreSubmission.Submitted -> Text(stringResource(R.string.complete_score_submitted))
                     ScoreSubmission.Pending -> Text(stringResource(R.string.complete_score_pending))
                     ScoreSubmission.NotPersonalBest -> Text(stringResource(R.string.complete_score_not_best))
+                    ScoreSubmission.LocalOnly -> Text(stringResource(R.string.complete_local_only))
                     ScoreSubmission.NotSubmitted -> Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                     }
@@ -557,10 +576,19 @@ private fun CompletionDialog(
         confirmButton = { Button(onClick = onNewGame) { Text(stringResource(R.string.complete_new_game)) } },
         dismissButton = {
             Row {
-                OutlinedButton(onClick = onLeaderboard) { Text(stringResource(R.string.complete_view_leaderboard)) }
+                if (game.variant == null) {
+                    OutlinedButton(onClick = onLeaderboard) { Text(stringResource(R.string.complete_view_leaderboard)) }
+                }
                 Spacer(Modifier.width(8.dp))
                 TextButton(onClick = onHome) { Text(stringResource(R.string.complete_home)) }
             }
         },
     )
+}
+
+@StringRes
+private fun variantName(variant: Variant): Int = when (variant) {
+    Variant.SAMURAI -> R.string.variant_samurai
+    Variant.FLOWER -> R.string.variant_flower
+    Variant.OUTSIDE -> R.string.variant_outside
 }

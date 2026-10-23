@@ -3,6 +3,8 @@ package com.maslarski.sudoku.domain.engine
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
+import com.maslarski.sudoku.domain.model.Topology
+import com.maslarski.sudoku.domain.model.UnitKind
 
 /**
  * Produces an explained next step. Strategies are tried from most to least instructive:
@@ -11,97 +13,118 @@ import com.maslarski.sudoku.domain.model.Hint
 class HintEngine {
 
     fun nextHint(state: GameState): Hint {
-        val gridSize = state.gridSize
+        val topology = state.topology
         val grid = state.valuesArray()
         val solution = state.puzzle.solution
+        val active = topology.activeIndices
 
-        val wrong = grid.indices.firstOrNull { grid[it] != 0 && grid[it] != solution[it] }
+        val wrong = active.firstOrNull { grid[it] != 0 && grid[it] != solution[it] }
         if (wrong != null) return Hint.FixMistake(wrong, solution[wrong], grid[wrong])
 
-        if (grid.none { it == 0 }) return Hint.None
+        if (active.none { grid[it] == 0 }) return Hint.None
 
-        val solver = SudokuSolver(gridSize)
-        val candidates = IntArray(grid.size) { solver.candidates(grid, it) }
+        val candidates = candidates(state, grid)
+        nakedSingle(grid, candidates, topology)?.let { return it }
+        hiddenSingle(
+            grid,
+            candidates,
+            topology,
+            if (state.variant == null) state.gridSize.size else 9,
+        )?.let { return it }
 
-        nakedSingle(grid, candidates, gridSize)?.let { return it }
-        hiddenSingle(grid, candidates, gridSize)?.let { return it }
-
-        // Fall back to the emptiest-constrained cell so the reveal is at least plausible to deduce.
-        val target = grid.indices.filter { grid[it] == 0 }.minByOrNull { Integer.bitCount(candidates[it]) } ?: return Hint.None
+        val target = active.filter { grid[it] == 0 }
+            .minByOrNull { Integer.bitCount(candidates[it]) } ?: return Hint.None
         return Hint.Reveal(target, solution[target])
     }
 
     fun hintFor(state: GameState, index: Int): Hint? {
+        val topology = state.topology
+        if (!topology.active[index]) return null
         val grid = state.valuesArray()
         val solution = state.puzzle.solution
-        if (grid[index] == solution[index] && state.cells[index].isGiven.not()) return null
+        if (grid[index] == solution[index] && !state.cells[index].isGiven) return null
         if (state.cells[index].isGiven) return null
         if (grid[index] != 0) return Hint.FixMistake(index, solution[index], grid[index])
-        if (grid.indices.any { grid[it] != 0 && grid[it] != solution[it] }) {
+        if (topology.activeIndices.any { grid[it] != 0 && grid[it] != solution[it] }) {
             return Hint.Reveal(index, solution[index])
         }
 
-        val gridSize = state.gridSize
-        val solver = SudokuSolver(gridSize)
-        val candidates = IntArray(grid.size) { solver.candidates(grid, it) }
+        val candidates = candidates(state, grid)
         val mask = candidates[index]
         if (Integer.bitCount(mask) == 1) {
             val value = Integer.numberOfTrailingZeros(mask) + 1
             if (value == solution[index]) {
-                return Hint.NakedSingle(index, value, peersOf(index, gridSize).filter { grid[it] != 0 })
+                return Hint.NakedSingle(index, value, topology.peers(index).filter { grid[it] != 0 })
             }
         }
 
-        val n = gridSize.size
-        val row = (index / n) * n
-        val col = index % n
-        val box = gridSize.boxIndex(index / n, index % n)
-        val units = listOf(
-            (row until row + n).toList() to Hint.HiddenSingle.Unit.ROW,
-            (0 until n).map { it * n + col } to Hint.HiddenSingle.Unit.COLUMN,
-            boxCells(box, gridSize) to Hint.HiddenSingle.Unit.BOX,
-        )
-        for ((cells, unit) in units) {
-            singleInUnit(cells, grid, candidates, unit, solution[index])
+        for (unitIndex in topology.unitsFor(index)) {
+            val kind = topology.unitKinds[unitIndex].toHintUnit()
+            singleInUnit(
+                topology.units[unitIndex],
+                grid,
+                candidates,
+                kind,
+                valueCount = if (state.variant == null) state.gridSize.size else 9,
+                onlyValue = solution[index],
+            )
                 ?.takeIf { it.index == index && it.value == solution[index] }
                 ?.let { return it }
         }
         return Hint.Reveal(index, solution[index])
     }
 
-    private fun nakedSingle(grid: IntArray, candidates: IntArray, gridSize: GridSize): Hint? {
-        for (i in grid.indices) {
-            if (grid[i] != 0) continue
-            val mask = candidates[i]
+    private fun candidates(state: GameState, grid: IntArray): IntArray {
+        val topology = state.topology
+        return if (state.variant == null) {
+            val solver = SudokuSolver(state.gridSize)
+            IntArray(grid.size) { index ->
+                if (topology.active[index]) solver.candidates(grid, index) else 0
+            }
+        } else {
+            val masks = state.puzzle.outsideClues?.exclusionMasks(topology)
+            val solver = UnitSolver(topology, masks)
+            IntArray(grid.size) { index ->
+                if (topology.active[index]) solver.candidates(grid, index) else 0
+            }
+        }
+    }
+
+    private fun nakedSingle(grid: IntArray, candidates: IntArray, topology: Topology): Hint? {
+        for (index in topology.activeIndices) {
+            if (grid[index] != 0) continue
+            val mask = candidates[index]
             if (Integer.bitCount(mask) == 1) {
                 val value = Integer.numberOfTrailingZeros(mask) + 1
-                return Hint.NakedSingle(i, value, peersOf(i, gridSize).filter { grid[it] != 0 })
+                return Hint.NakedSingle(index, value, topology.peers(index).filter { grid[it] != 0 })
             }
         }
         return null
     }
 
-    private fun hiddenSingle(grid: IntArray, candidates: IntArray, gridSize: GridSize): Hint? {
-        val n = gridSize.size
-        for (unit in 0 until n) {
-            val row = (0 until n).map { unit * n + it }
-            singleInUnit(row, grid, candidates, Hint.HiddenSingle.Unit.ROW)?.let { return it }
-            val col = (0 until n).map { it * n + unit }
-            singleInUnit(col, grid, candidates, Hint.HiddenSingle.Unit.COLUMN)?.let { return it }
-            singleInUnit(boxCells(unit, gridSize), grid, candidates, Hint.HiddenSingle.Unit.BOX)?.let { return it }
+    private fun hiddenSingle(
+        grid: IntArray,
+        candidates: IntArray,
+        topology: Topology,
+        valueCount: Int,
+    ): Hint? {
+        for (unitIndex in topology.units.indices) {
+            val unit = topology.units[unitIndex]
+            val kind = topology.unitKinds[unitIndex].toHintUnit()
+            singleInUnit(unit, grid, candidates, kind, valueCount)?.let { return it }
         }
         return null
     }
 
     private fun singleInUnit(
-        cells: List<Int>,
+        cells: IntArray,
         grid: IntArray,
         candidates: IntArray,
         unit: Hint.HiddenSingle.Unit,
+        valueCount: Int,
         onlyValue: Int? = null,
     ): Hint? {
-        val n = cells.size
-        for (value in onlyValue?.let(::listOf) ?: (1..n).toList()) {
+        for (value in onlyValue?.let(::listOf) ?: (1..valueCount).toList()) {
             val bit = 1 shl (value - 1)
             if (cells.any { grid[it] == value }) continue
             val spots = cells.filter { grid[it] == 0 && candidates[it] and bit != 0 }
@@ -112,26 +135,17 @@ class HintEngine {
         return null
     }
 
-    private fun boxCells(box: Int, gridSize: GridSize): List<Int> {
-        val n = gridSize.size
-        val boxesPerRow = n / gridSize.boxCols
-        val r0 = (box / boxesPerRow) * gridSize.boxRows
-        val c0 = (box % boxesPerRow) * gridSize.boxCols
-        return buildList {
-            for (r in r0 until r0 + gridSize.boxRows) for (c in c0 until c0 + gridSize.boxCols) add(r * n + c)
-        }
+    private fun UnitKind.toHintUnit(): Hint.HiddenSingle.Unit = when (this) {
+        UnitKind.ROW -> Hint.HiddenSingle.Unit.ROW
+        UnitKind.COLUMN -> Hint.HiddenSingle.Unit.COLUMN
+        UnitKind.BOX -> Hint.HiddenSingle.Unit.BOX
     }
 
     companion object {
         /** All cells sharing a row, column, or box with [index], excluding [index]. */
-        fun peersOf(index: Int, gridSize: GridSize): List<Int> {
-            val n = gridSize.size
-            val r = index / n
-            val c = index % n
-            val box = gridSize.boxIndex(r, c)
-            return (0 until n * n).filter { other ->
-                other != index && (other / n == r || other % n == c || gridSize.boxIndex(other / n, other % n) == box)
-            }
-        }
+        fun peersOf(index: Int, gridSize: GridSize): List<Int> =
+            peersOf(index, Topology.classic(gridSize))
+
+        fun peersOf(index: Int, topology: Topology): List<Int> = topology.peers(index).toList()
     }
 }

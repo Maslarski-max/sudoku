@@ -6,6 +6,7 @@ import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Lives
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
@@ -28,6 +29,7 @@ import javax.inject.Inject
 data class HomeUiState(
     val gridSize: GridSize = GridSize.NINE,
     val difficulty: Difficulty = Difficulty.EASY,
+    val variant: Variant? = null,
     val savedGames: List<SavedGameSummary> = emptyList(),
     val lives: Lives? = null,
     val generating: Boolean = false,
@@ -37,7 +39,8 @@ data class HomeUiState(
     /** Set when generating or saving a new game threw; any charge has been refunded. */
     val startFailed: Boolean = false,
 ) {
-    val savedForSelection: SavedGameSummary? get() = savedGames.firstOrNull { it.gridSize == gridSize }
+    val selectedSlotId: Int get() = variant?.slotId ?: gridSize.size
+    val savedForSelection: SavedGameSummary? get() = savedGames.firstOrNull { it.slotId == selectedSlotId }
 }
 
 @HiltViewModel
@@ -57,10 +60,12 @@ class HomeViewModel @Inject constructor(
         sel.copy(savedGames = saved.sortedByDescending { it.lastPlayedEpochMillis }, lives = lives)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
-    private val _navigateToGame = MutableSharedFlow<GridSize>(extraBufferCapacity = 1)
-    val navigateToGame: SharedFlow<GridSize> = _navigateToGame.asSharedFlow()
+    private val _navigateToGame = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    val navigateToGame: SharedFlow<Int> = _navigateToGame.asSharedFlow()
 
-    fun selectGridSize(gridSize: GridSize) = selection.update { it.copy(gridSize = gridSize) }
+    fun selectGridSize(gridSize: GridSize) = selection.update { it.copy(gridSize = gridSize, variant = null) }
+    fun selectVariant(variant: Variant) =
+        selection.update { it.copy(gridSize = GridSize.NINE, variant = variant) }
     fun selectDifficulty(difficulty: Difficulty) = selection.update { it.copy(difficulty = difficulty) }
 
     fun onNewGameClicked() {
@@ -97,7 +102,11 @@ class HomeViewModel @Inject constructor(
     fun dismissStartFailed() = selection.update { it.copy(startFailed = false) }
 
     fun continueGame(gridSize: GridSize) {
-        _navigateToGame.tryEmit(gridSize)
+        _navigateToGame.tryEmit(gridSize.size)
+    }
+
+    fun continueGame(saved: SavedGameSummary) {
+        _navigateToGame.tryEmit(saved.slotId)
     }
 
     private fun startGame(
@@ -105,15 +114,17 @@ class HomeViewModel @Inject constructor(
         onSaveFailed: suspend () -> Unit = {},
     ) {
         if (selection.value.generating) return
-        val (gridSize, difficulty) = selection.value.let { it.gridSize to it.difficulty }
+        val (gridSize, difficulty, variant) = selection.value.let {
+            Triple(it.gridSize, it.difficulty, it.variant)
+        }
         selection.update { it.copy(generating = true) }
         viewModelScope.launch {
             try {
-                if (startNewGame(gridSize, difficulty, beforeSave, onSaveFailed) == null) {
+                if (startNewGame(gridSize, difficulty, beforeSave, onSaveFailed, variant) == null) {
                     selection.update { it.copy(replaceBlocked = true) }
                     return@launch
                 }
-                _navigateToGame.emit(gridSize)
+                _navigateToGame.emit(variant?.slotId ?: gridSize.size)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

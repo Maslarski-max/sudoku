@@ -13,6 +13,7 @@ import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.model.ProductId
 import com.maslarski.sudoku.domain.model.Score
 import com.maslarski.sudoku.domain.model.StoreProduct
+import com.maslarski.sudoku.domain.model.Variant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -20,8 +21,13 @@ import kotlinx.coroutines.flow.StateFlow
 interface GameRepository {
     fun observeSavedGames(): Flow<List<SavedGameSummary>>
     suspend fun load(gridSize: GridSize): GameState?
+    suspend fun loadSlot(slotId: Int): GameState? =
+        GridSize.entries.firstOrNull { it.size == slotId }?.let { load(it) }
     suspend fun save(state: GameState)
     suspend fun delete(gridSize: GridSize)
+    suspend fun deleteSlot(slotId: Int) {
+        GridSize.entries.firstOrNull { it.size == slotId }?.let { delete(it) }
+    }
 }
 
 data class SavedGameSummary(
@@ -30,7 +36,10 @@ data class SavedGameSummary(
     val elapsedMillis: Long,
     val filledFraction: Float,
     val lastPlayedEpochMillis: Long,
-)
+    val variant: Variant? = null,
+) {
+    val slotId: Int get() = variant?.slotId ?: gridSize.size
+}
 
 interface LivesRepository {
     val lives: Flow<Lives>

@@ -4,6 +4,8 @@ import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
+import com.maslarski.sudoku.domain.model.OutsideClues
+import com.maslarski.sudoku.domain.model.Variant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -81,5 +83,35 @@ class GameStateSerializerTest {
         val restored = serializer.decode(legacyJson)
 
         assertFalse(restored.cells[comboIndex].combo)
+    }
+
+    @Test
+    fun `variant and outside clues round trip`() {
+        val clues = OutsideClues(
+            rowsFromLeft = listOf(listOf(1, 2)),
+            rowsFromRight = listOf(emptyList(), listOf(4)),
+            columnsFromTop = listOf(listOf(7)),
+            columnsFromBottom = listOf(listOf(9, 3)),
+        )
+        val variantGame = game.copy(
+            puzzle = game.puzzle.copy(variant = Variant.OUTSIDE, outsideClues = clues),
+        )
+
+        val restored = serializer.decode(serializer.encode(variantGame))
+
+        assertEquals(Variant.OUTSIDE, restored.puzzle.variant)
+        assertEquals(clues, restored.puzzle.outsideClues)
+    }
+
+    @Test
+    fun `old snapshot without variant metadata restores as classic`() {
+        val encoded = serializer.encode(game)
+            .replace(",\"variant\":null", "")
+            .replace(",\"outsideClues\":null", "")
+
+        val restored = serializer.decode(encoded)
+
+        assertNull(restored.puzzle.variant)
+        assertNull(restored.puzzle.outsideClues)
     }
 }

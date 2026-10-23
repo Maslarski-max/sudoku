@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -21,16 +22,20 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.Hint
+import com.maslarski.sudoku.domain.model.Topology
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.ui.theme.LocalBoardColors
 import kotlin.math.max
 
@@ -38,14 +43,57 @@ import kotlin.math.max
 class BoardTransform {
     var scale by mutableFloatStateOf(1f)
     var offset by mutableStateOf(Offset.Zero)
+    var maxScale by mutableFloatStateOf(4f)
+        private set
+    private var initialized = false
 
     fun reset() {
         scale = 1f
         offset = Offset.Zero
     }
 
+    fun initialize(variant: Variant?, topology: Topology, viewport: Size) {
+        maxScale = if (variant == Variant.SAMURAI || variant == Variant.FLOWER) 3f else 4f
+        if (initialized || viewport.width <= 0f || viewport.height <= 0f) return
+        initialized = true
+        if (variant != Variant.SAMURAI && variant != Variant.FLOWER) {
+            reset()
+            return
+        }
+        val (row, col) = if (variant == Variant.SAMURAI) 6 to 6 else 3 to 3
+        val initialScale = (topology.width / 9f).coerceAtMost(maxScale)
+        val cell = viewport.width / topology.width
+        scale = initialScale
+        offset = Offset(
+            x = viewport.width / 2f - (col + 4.5f) * cell * initialScale,
+            y = viewport.height / 2f - (row + 4.5f) * cell * initialScale,
+        )
+        clamp(viewport)
+    }
+
+    fun keepVisible(index: Int, topology: Topology, viewport: Size, outsideMargin: Int) {
+        if (index < 0 || !topology.active[index] || viewport.width <= 0f) return
+        val margin = outsideMargin / 2
+        val contentWidth = topology.width + outsideMargin
+        val cell = viewport.width / contentWidth
+        val row = index / topology.width
+        val col = index % topology.width
+        val left = (margin + col) * cell * scale + offset.x
+        val top = (margin + row) * cell * scale + offset.y
+        val right = left + cell * scale
+        val bottom = top + cell * scale
+        var x = offset.x
+        var y = offset.y
+        if (left < 0f) x -= left
+        else if (right > viewport.width) x -= right - viewport.width
+        if (top < 0f) y -= top
+        else if (bottom > viewport.height) y -= bottom - viewport.height
+        offset = Offset(x, y)
+        clamp(viewport)
+    }
+
     fun clamp(viewport: Size) {
-        scale = scale.coerceIn(MIN_SCALE, MAX_SCALE)
+        scale = scale.coerceIn(MIN_SCALE, maxScale)
         val contentW = viewport.width * scale
         val contentH = viewport.height * scale
         val maxX = max(0f, (contentW - viewport.width))
@@ -55,7 +103,6 @@ class BoardTransform {
 
     companion object {
         const val MIN_SCALE = 1f
-        const val MAX_SCALE = 4f
     }
 }
 
@@ -75,27 +122,47 @@ fun SudokuBoard(
 ) {
     val colors = LocalBoardColors.current
     val textMeasurer = rememberTextMeasurer()
-    val n = game.gridSize.size
+    val topology = game.topology
+    val n = topology.width
+    val outsideMargin = if (game.variant == Variant.OUTSIDE) 2 else 0
     // Digits repeat across the board, so each (text, style) is laid out once per cell size instead of
     // once per cell per frame (18x18 = 324 cells plus notes).
-    val layoutCache = remember(n, colors) { TextLayoutCache(textMeasurer) }
+    val layoutCache = remember(n, colors, game.variant) { TextLayoutCache(textMeasurer) }
 
     val hintRelated = remember(activeHint) { activeHint?.relatedIndices?.toSet() ?: emptySet() }
-    val selectedPeers = remember(selectedIndex, game.gridSize) {
-        if (selectedIndex >= 0) HintEngine.peersOf(selectedIndex, game.gridSize).toSet() else emptySet()
+    val selectedPeers = remember(selectedIndex, topology) {
+        if (selectedIndex >= 0) HintEngine.peersOf(selectedIndex, topology).toSet() else emptySet()
     }
-    val selectedValue = if (selectedIndex >= 0) game.cells[selectedIndex].value else 0
+    val selectedValue = if (selectedIndex >= 0 && topology.active[selectedIndex]) game.cells[selectedIndex].value else 0
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+
+    LaunchedEffect(selectedIndex, viewportSize, topology) {
+        transform.keepVisible(
+            selectedIndex,
+            topology,
+            Size(viewportSize.width.toFloat(), viewportSize.height.toFloat()),
+            outsideMargin,
+        )
+    }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1f)
             .clipToBounds()
-            .pointerInput(n) {
+            .onSizeChanged { size ->
+                viewportSize = size
+                transform.initialize(
+                    game.variant,
+                    topology,
+                    Size(size.width.toFloat(), size.height.toFloat()),
+                )
+            }
+            .pointerInput(n, topology.height) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
                     val viewport = Size(size.width.toFloat(), size.height.toFloat())
                     val oldScale = transform.scale
-                    val newScale = (oldScale * zoom).coerceIn(BoardTransform.MIN_SCALE, BoardTransform.MAX_SCALE)
+                    val newScale = (oldScale * zoom).coerceIn(BoardTransform.MIN_SCALE, transform.maxScale)
                     // Keep the point under the fingers fixed while zooming.
                     val focal = centroid - transform.offset
                     transform.offset = transform.offset - focal * (newScale / oldScale - 1f) + pan
@@ -103,13 +170,17 @@ fun SudokuBoard(
                     transform.clamp(viewport)
                 }
             }
-            .pointerInput(n) {
+            .pointerInput(n, topology.height, outsideMargin) {
                 detectTapGestures { tap ->
                     val local = (tap - transform.offset) / transform.scale
-                    val cell = size.width.toFloat() / n
-                    val col = (local.x / cell).toInt()
-                    val row = (local.y / cell).toInt()
-                    if (row in 0 until n && col in 0 until n) onCellTap(row * n + col)
+                    val cell = size.width.toFloat() / (n + outsideMargin)
+                    val margin = if (outsideMargin > 0) cell else 0f
+                    val col = ((local.x - margin) / cell).toInt()
+                    val row = ((local.y - margin) / cell).toInt()
+                    if (row in 0 until topology.height && col in 0 until topology.width) {
+                        val index = row * topology.width + col
+                        if (topology.active[index]) onCellTap(index)
+                    }
                 }
             },
     ) {
@@ -126,6 +197,7 @@ fun SudokuBoard(
                         candidateMasks = candidateMasks,
                         colors = colors,
                         layouts = layoutCache,
+                        outsideMargin = outsideMargin,
                     )
                 }
             }
@@ -143,20 +215,21 @@ private fun DrawScope.drawBoard(
     candidateMasks: IntArray?,
     colors: com.maslarski.sudoku.ui.theme.BoardColors,
     layouts: TextLayoutCache,
+    outsideMargin: Int,
 ) {
-    val gridSize = game.gridSize
-    val n = gridSize.size
-    val cell = size.width / n
+    val topology = game.topology
+    val width = topology.width
+    val height = topology.height
+    val marginCells = outsideMargin / 2
+    val cell = size.width / (width + outsideMargin)
+    val origin = marginCells * cell
     layouts.forCellSize(cell)
-    val boxRows = gridSize.boxRows
-    val boxCols = gridSize.boxCols
 
     drawRect(colors.cellBackground)
 
-    // Cell backgrounds
-    for (index in 0 until n * n) {
-        val row = index / n
-        val col = index % n
+    for (index in topology.activeIndices) {
+        val row = index / width
+        val col = index % width
         val c = game.cells[index]
         val bg = when {
             activeHint != null && index == activeHint.index -> colors.hintTarget
@@ -167,26 +240,26 @@ private fun DrawScope.drawBoard(
             else -> null
         }
         if (bg != null) {
-            drawRect(bg, topLeft = Offset(col * cell, row * cell), size = Size(cell, cell))
+            drawRect(bg, topLeft = Offset(origin + col * cell, origin + row * cell), size = Size(cell, cell))
         }
     }
 
-    // Values and notes
     val valueSize = spOf(cell * 0.55f)
-    val noteCols = gridSize.boxCols.coerceAtLeast(3)
-    val noteRows = (n + noteCols - 1) / noteCols
+    val valueCount = if (game.variant == null) game.gridSize.size else 9
+    val noteCols = if (game.variant == null) game.gridSize.boxCols.coerceAtLeast(3) else 3
+    val noteRows = (valueCount + noteCols - 1) / noteCols
     val noteSize = spOf(cell / max(noteCols, noteRows) * 0.8f)
     val valueStyleGiven = TextStyle(fontSize = valueSize, fontWeight = FontWeight.SemiBold, color = colors.givenText)
     val valueStyleEntered = TextStyle(fontSize = valueSize, color = colors.enteredText)
     val valueStyleError = TextStyle(fontSize = valueSize, color = colors.errorText)
     val noteStyle = TextStyle(fontSize = noteSize, color = colors.noteText)
 
-    for (index in 0 until n * n) {
-        val row = index / n
-        val col = index % n
+    for (index in topology.activeIndices) {
+        val row = index / width
+        val col = index % width
         val c = game.cells[index]
-        val x = col * cell
-        val y = row * cell
+        val x = origin + col * cell
+        val y = origin + row * cell
         if (c.value != 0) {
             val style = when {
                 c.isGiven -> valueStyleGiven
@@ -202,7 +275,7 @@ private fun DrawScope.drawBoard(
             val notes = candidateMasks?.getOrNull(index) ?: c.notes
             val subW = cell / noteCols
             val subH = cell / noteRows
-            for (v in 1..n) {
+            for (v in 1..valueCount) {
                 if (notes and (1 shl (v - 1)) == 0) continue
                 val k = v - 1
                 val nc = k % noteCols
@@ -219,27 +292,57 @@ private fun DrawScope.drawBoard(
         }
     }
 
-    // Grid lines: thin between cells, thick on box borders.
     val thin = max(1f, cell * 0.02f)
     val thick = max(2f, cell * 0.06f)
-    for (i in 0..n) {
-        val isBoxRow = i % boxRows == 0
-        val isBoxCol = i % boxCols == 0
-        val p = i * cell
-        drawLine(
-            color = if (isBoxRow) colors.thickLine else colors.thinLine,
-            start = Offset(0f, p),
-            end = Offset(size.width, p),
-            strokeWidth = if (isBoxRow) thick else thin,
-        )
-        drawLine(
-            color = if (isBoxCol) colors.thickLine else colors.thinLine,
-            start = Offset(p, 0f),
-            end = Offset(p, size.height),
-            strokeWidth = if (isBoxCol) thick else thin,
+    for (index in topology.activeIndices) {
+        val row = index / width
+        val col = index % width
+        val left = origin + col * cell
+        val top = origin + row * cell
+        if (col + 1 < width && topology.active[index + 1]) {
+            drawLine(colors.thinLine, Offset(left + cell, top), Offset(left + cell, top + cell), thin)
+        }
+        if (row + 1 < height && topology.active[index + width]) {
+            drawLine(colors.thinLine, Offset(left, top + cell), Offset(left + cell, top + cell), thin)
+        }
+    }
+    topology.boxOutlines.forEach { outline ->
+        drawRect(
+            color = colors.thickLine,
+            topLeft = Offset(origin + outline.col * cell, origin + outline.row * cell),
+            size = Size(outline.width * cell, outline.height * cell),
+            style = Stroke(width = thick),
         )
     }
-    drawRect(colors.thickLine, style = Stroke(width = thick))
+
+    val clues = game.puzzle.outsideClues
+    if (clues != null && outsideMargin > 0) {
+        val clueStyle = TextStyle(
+            fontSize = spOf(cell * 0.34f),
+            fontWeight = FontWeight.Bold,
+            color = colors.noteText,
+        )
+        fun drawStack(values: List<Int>, left: Float, top: Float) {
+            val visible = values.take(2)
+            if (visible.isEmpty()) return
+            val layoutsForValues = visible.map { layouts.get(it, clueStyle) }
+            val totalHeight = layoutsForValues.sumOf { it.size.height.toDouble() }.toFloat()
+            var y = top + (cell - totalHeight) / 2f
+            layoutsForValues.forEach { layout ->
+                drawText(
+                    layout,
+                    topLeft = Offset(left + (cell - layout.size.width) / 2f, y),
+                )
+                y += layout.size.height
+            }
+        }
+        for (line in 0 until 9) {
+            drawStack(clues.rowsFromLeft.getOrNull(line).orEmpty(), 0f, origin + line * cell)
+            drawStack(clues.rowsFromRight.getOrNull(line).orEmpty(), origin + 9 * cell, origin + line * cell)
+            drawStack(clues.columnsFromTop.getOrNull(line).orEmpty(), origin + line * cell, 0f)
+            drawStack(clues.columnsFromBottom.getOrNull(line).orEmpty(), origin + line * cell, origin + 9 * cell)
+        }
+    }
 }
 
 private class TextLayoutCache(private val measurer: androidx.compose.ui.text.TextMeasurer) {

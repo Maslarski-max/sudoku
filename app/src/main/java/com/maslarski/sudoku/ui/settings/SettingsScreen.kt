@@ -194,6 +194,9 @@ fun SettingsScreen(
                     Text(stringResource(R.string.settings_rule_mistakes))
                     Text(stringResource(R.string.settings_rule_lives))
                     Text(stringResource(R.string.settings_rule_countdown))
+                    Text(stringResource(R.string.settings_rule_samurai))
+                    Text(stringResource(R.string.settings_rule_flower))
+                    Text(stringResource(R.string.settings_rule_outside))
                 }
             },
             confirmButton = {
