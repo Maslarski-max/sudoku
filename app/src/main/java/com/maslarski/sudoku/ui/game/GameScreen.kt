@@ -72,6 +72,7 @@ import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.ui.components.difficultyLabel
 import com.maslarski.sudoku.ui.components.formatDuration
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,6 +86,8 @@ fun GameScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val transform = remember { BoardTransform() }
+    // Outlives ReviewDialog, which leaves composition as soon as the prompt is resolved.
+    val reviewScope = rememberCoroutineScope()
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -174,6 +177,7 @@ fun GameScreen(
 
     when {
         state.showReviewPrompt -> ReviewDialog(
+            scope = reviewScope,
             onRateNow = viewModel::onReviewRateNow,
             onLater = viewModel::onReviewLater,
             onNever = viewModel::onReviewNever,
@@ -378,10 +382,9 @@ private fun OutOfLivesDialog(
 }
 
 @Composable
-private fun ReviewDialog(onRateNow: () -> Unit, onLater: () -> Unit, onNever: () -> Unit) {
+private fun ReviewDialog(scope: CoroutineScope, onRateNow: () -> Unit, onLater: () -> Unit, onNever: () -> Unit) {
     val context = LocalContext.current
     val activity = LocalActivity.current
-    val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = onLater,
         title = { Text(stringResource(R.string.review_title)) },
