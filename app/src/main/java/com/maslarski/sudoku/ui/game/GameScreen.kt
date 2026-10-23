@@ -133,13 +133,20 @@ fun GameScreen(
             TopAppBar(
                 title = {
                     if (game != null) {
-                        val title = game.variant?.let { variant ->
-                            stringResource(
+                        val variant = game.variant
+                        val title = when {
+                            game.dailyDate != null -> stringResource(R.string.game_title_daily, game.dailyDate)
+                            variant != null -> stringResource(
                                 R.string.game_title_variant,
                                 stringResource(variantName(variant)),
                                 difficultyLabel(game.difficulty),
                             )
-                        } ?: stringResource(R.string.game_title, game.gridSize.size, difficultyLabel(game.difficulty))
+                            else -> stringResource(
+                                R.string.game_title,
+                                game.gridSize.size,
+                                difficultyLabel(game.difficulty),
+                            )
+                        }
                         Text(title)
                     }
                 },

@@ -10,6 +10,7 @@ import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.model.TournamentBoard
+import com.maslarski.sudoku.domain.model.TournamentEntry
 import com.maslarski.sudoku.domain.model.TournamentSnapshot
 import com.maslarski.sudoku.domain.model.TrophyCategory
 import com.maslarski.sudoku.domain.repository.DailyChallengeRepository
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,7 +37,7 @@ class TrophyRepositoryTest {
         val repository = DataStoreTrophyRepository(
             MemoryPreferencesStore(),
             daily,
-            EmptyTournamentRepository(),
+            AwardTournamentRepository(emptyMap()),
             lives,
             EpochClock { Instant.parse("2024-03-01T12:00:00Z").toEpochMilli() },
         )
@@ -49,6 +51,45 @@ class TrophyRepositoryTest {
         assertFalse(trophies.first { it.id == "daily_master_2024-03" }.unlocked)
         assertTrue(trophies.first { it.id == "milestone_holiday" }.unlocked)
         assertTrue(trophies.filter { it.category == TrophyCategory.PREMIUM }.none { it.unlocked })
+    }
+
+    @Test
+    fun `stores two distinct tournament awards and checks previous year outside January`() = runTest {
+        val store = MemoryPreferencesStore()
+        val arena = TournamentSnapshot(
+            TournamentBoard.ARENA,
+            "2024-02",
+            emptyList(),
+            TournamentEntry(1, "player", "Player", 1200, 3, true),
+        )
+        val championship = TournamentSnapshot(
+            TournamentBoard.CHAMPIONSHIP,
+            "2023",
+            emptyList(),
+            TournamentEntry(2, "player", "Player", 2400, 7, true),
+        )
+        val tournaments = AwardTournamentRepository(
+            mapOf(
+                (TournamentBoard.ARENA to "2024-02") to Result.success(arena),
+                (TournamentBoard.CHAMPIONSHIP to "2023") to Result.success(championship),
+            ),
+        )
+        val repository = DataStoreTrophyRepository(
+            store,
+            FakeDailyRepository(emptySet()),
+            tournaments,
+            FakeLivesRepository(),
+            EpochClock { Instant.parse("2024-03-01T12:00:00Z").toEpochMilli() },
+        )
+
+        repository.refreshPeriodAwards()
+        repository.refreshPeriodAwards()
+
+        val awards = repository.trophies.first().filter { it.category == TrophyCategory.TOURNAMENT }
+        assertEquals(2, awards.size)
+        assertTrue(awards.any { it.id == "tournament_arena_2024-02_1" })
+        assertTrue(awards.any { it.id == "tournament_championship_2023_2" })
+        assertEquals(listOf("2024-02", "2023"), tournaments.periods)
     }
 }
 
@@ -76,9 +117,14 @@ private class FakeLivesRepository : LivesRepository {
     override suspend fun setUnlimited(unlimited: Boolean) = Unit
 }
 
-private class EmptyTournamentRepository : TournamentRepository {
+private class AwardTournamentRepository(
+    private val responses: Map<Pair<TournamentBoard, String>, Result<TournamentSnapshot>>,
+) : TournamentRepository {
+    val periods = mutableListOf<String>()
     override suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int) = Result.success(Unit)
     override suspend fun flushPending() = Unit
-    override suspend fun load(board: TournamentBoard, period: String, limit: Int) =
-        Result.success(TournamentSnapshot(board, period, emptyList(), null))
+    override suspend fun load(board: TournamentBoard, period: String, limit: Int): Result<TournamentSnapshot> {
+        periods += period
+        return responses[board to period] ?: Result.success(TournamentSnapshot(board, period, emptyList(), null))
+    }
 }

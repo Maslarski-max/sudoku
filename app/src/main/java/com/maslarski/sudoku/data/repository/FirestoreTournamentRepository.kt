@@ -2,9 +2,9 @@ package com.maslarski.sudoku.data.repository
 
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
+import com.google.android.gms.tasks.Task
 import com.maslarski.sudoku.domain.model.PendingTournamentScore
 import com.maslarski.sudoku.domain.model.Score
 import com.maslarski.sudoku.domain.model.TournamentBoard
@@ -16,6 +16,8 @@ import com.maslarski.sudoku.domain.repository.TournamentRepository
 import com.maslarski.sudoku.domain.time.EpochClock
 import com.maslarski.sudoku.domain.usecase.PendingUploadResult
 import com.maslarski.sudoku.domain.usecase.flushTournamentQueue
+import com.maslarski.sudoku.domain.usecase.recordTournamentScore
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -34,37 +36,35 @@ class FirestoreTournamentRepository @Inject constructor(
         board: TournamentBoard,
         completedAtEpochMillis: Long,
         points: Int,
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> {
         val period = board.periodAt(completedAtEpochMillis)
         val entry = PendingTournamentScore(board, period, points)
-        if (board.currentPeriod(clock.now()) != period) return@runCatching
+        if (board.currentPeriod(clock.now()) != period) return Result.success(Unit)
         val uid = runCatching {
             authRepository.currentUserId ?: authRepository.ensureSignedIn()
         }.getOrNull()
-        if (uid == null) {
-            pendingQueue.add(entry)
-            return@runCatching
-        }
-        val upload = runCatching { write(entry, uid) }
-        val error = upload.exceptionOrNull() ?: return@runCatching
-        if (error.isPermissionDenied()) return@runCatching
-        if (board.currentPeriod(clock.now()) == period) pendingQueue.add(entry)
-        throw error
+        return recordTournamentScore(pendingQueue, entry, uid, ::write)
     }
 
     override suspend fun flushPending() {
-        withTimeoutOrNull(NETWORK_TIMEOUT_MILLIS) {
-            val entries = pendingQueue.entries()
-            if (entries.isEmpty()) return@withTimeoutOrNull
-            val uid = runCatching {
+        if (pendingQueue.entries().isEmpty()) return
+        val uid = withTimeoutOrNull(NETWORK_TIMEOUT_MILLIS) {
+            runCatching {
                 authRepository.currentUserId ?: authRepository.ensureSignedIn()
             }.getOrNull()
-            flushTournamentQueue(pendingQueue, clock.now(), uid) { entry, signedInUid ->
-                runCatching { write(entry, signedInUid) }
+        }
+        flushTournamentQueue(pendingQueue, clock.now(), uid) { entry, signedInUid, onIssued ->
+            val taskResult = runCatching { issueWrite(entry, signedInUid) }
+            if (taskResult.isFailure) {
+                PendingUploadResult.DROP
+            } else {
+                onIssued()
+                runCatching { taskResult.getOrThrow().awaitNetwork() }
                     .fold(
                         onSuccess = { PendingUploadResult.UPLOADED },
                         onFailure = { error ->
-                            if (error.isPermissionDenied()) PendingUploadResult.DROP else PendingUploadResult.RETRY
+                            if (error is TimeoutCancellationException) PendingUploadResult.UPLOADED
+                            else PendingUploadResult.DROP
                         },
                     )
             }
@@ -109,6 +109,10 @@ class FirestoreTournamentRepository @Inject constructor(
     }
 
     private suspend fun write(entry: PendingTournamentScore, uid: String) {
+        issueWrite(entry, uid).awaitNetwork()
+    }
+
+    private fun issueWrite(entry: PendingTournamentScore, uid: String): Task<Void> =
         scores(entry.board, entry.period).document(uid).set(
             mapOf(
                 FIELD_UID to uid,
@@ -118,17 +122,13 @@ class FirestoreTournamentRepository @Inject constructor(
                 FIELD_UPDATED_AT to FieldValue.serverTimestamp(),
             ),
             SetOptions.merge(),
-        ).awaitNetwork()
-    }
+        )
 
     private fun scores(board: TournamentBoard, period: String) =
         firestore.collection(board.collection).document(period).collection(COLLECTION_SCORES)
 
     private suspend fun <T> com.google.android.gms.tasks.Task<T>.awaitNetwork(): T =
         withTimeout(NETWORK_TIMEOUT_MILLIS) { await() }
-
-    private fun Throwable.isPermissionDenied(): Boolean =
-        this is FirebaseFirestoreException && code == FirebaseFirestoreException.Code.PERMISSION_DENIED
 
     private companion object {
         const val NETWORK_TIMEOUT_MILLIS = 15_000L

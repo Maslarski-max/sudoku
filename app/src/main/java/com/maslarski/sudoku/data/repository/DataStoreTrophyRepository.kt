@@ -46,7 +46,11 @@ class DataStoreTrophyRepository @Inject constructor(
     private val earnedData = dataStore.data.map { preferences ->
         EarnedData(
             milestones = preferences[MILESTONES].orEmpty(),
-            tournamentAwards = preferences[TOURNAMENT_AWARDS].orEmpty(),
+            tournamentAwards = preferences[LEGACY_TOURNAMENT_AWARDS].orEmpty() +
+                preferences[TOURNAMENT_AWARDS].orEmpty()
+                    .lineSequence()
+                    .filter(String::isNotBlank)
+                    .toSet(),
         )
     }
 
@@ -94,16 +98,14 @@ class DataStoreTrophyRepository @Inject constructor(
                 dataStore.edit { it[CHECKED_ARENA_MONTH] = nowMonth.toString() }
             }
         }
-        if (nowMonth.monthValue == 1) {
-            val year = nowMonth.year.toString()
-            val checkedYear = dataStore.data.first()[CHECKED_CHAMPIONSHIP_YEAR]
-            if (checkedYear != year) {
-                val period = (nowMonth.year - 1).toString()
-                val result = tournamentRepository.load(TournamentBoard.CHAMPIONSHIP, period)
-                if (result.isSuccess) {
-                    result.getOrNull()?.let { persistPlacement(TournamentBoard.CHAMPIONSHIP, it) }
-                    dataStore.edit { it[CHECKED_CHAMPIONSHIP_YEAR] = year }
-                }
+        val year = nowMonth.year.toString()
+        val checkedYear = dataStore.data.first()[CHECKED_CHAMPIONSHIP_YEAR]
+        if (checkedYear != year) {
+            val period = (nowMonth.year - 1).toString()
+            val result = tournamentRepository.load(TournamentBoard.CHAMPIONSHIP, period)
+            if (result.isSuccess) {
+                result.getOrNull()?.let { persistPlacement(TournamentBoard.CHAMPIONSHIP, it) }
+                dataStore.edit { it[CHECKED_CHAMPIONSHIP_YEAR] = year }
             }
         }
     }
@@ -114,7 +116,15 @@ class DataStoreTrophyRepository @Inject constructor(
         if (rank !in 1..3) return
         val encoded = "${board.name}|${snapshot.period}|$rank"
         dataStore.edit { preferences ->
-            preferences[TOURNAMENT_AWARDS] = preferences[TOURNAMENT_AWARDS].orEmpty() + encoded
+            val awards = preferences[LEGACY_TOURNAMENT_AWARDS].orEmpty() +
+                preferences[TOURNAMENT_AWARDS].orEmpty()
+                    .lineSequence()
+                    .filter(String::isNotBlank)
+                    .toSet()
+            val uniqueAwards = awards.toMutableSet()
+            uniqueAwards += encoded
+            preferences[TOURNAMENT_AWARDS] = uniqueAwards.joinToString("\n")
+            preferences.remove(LEGACY_TOURNAMENT_AWARDS)
         }
     }
 
@@ -243,7 +253,8 @@ class DataStoreTrophyRepository @Inject constructor(
         const val MILESTONE_OUTSIDE = "milestone_outside"
         const val MILESTONE_HOLIDAY = "milestone_holiday"
         val MILESTONES = stringSetPreferencesKey("trophy_milestones")
-        val TOURNAMENT_AWARDS = stringSetPreferencesKey("trophy_tournament_awards")
+        val LEGACY_TOURNAMENT_AWARDS = stringSetPreferencesKey("trophy_tournament_awards")
+        val TOURNAMENT_AWARDS = stringPreferencesKey("trophy_tournament_awards_v2")
         val CHECKED_ARENA_MONTH = stringPreferencesKey("trophy_checked_arena_month")
         val CHECKED_CHAMPIONSHIP_YEAR = stringPreferencesKey("trophy_checked_championship_year")
     }

@@ -57,6 +57,7 @@
     <!-- Game -->
     <string name="game_title">%1$d×%1$d · %2$s</string>
     <string name="game_title_variant">%1$s · %2$s</string>
+    <string name="game_title_daily">Daily Challenge · %1$s</string>
     <string name="game_mistakes">Mistakes: %1$d</string>
     <string name="game_moves">Moves: %1$d</string>
     <string name="game_score">Score: %1$d</string>
