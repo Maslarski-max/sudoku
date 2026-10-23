@@ -273,6 +273,9 @@ class GameViewModel @Inject constructor(
             redoStack = emptyList(),
             outOfLivesDeadlineEpochMillis = null,
             outOfLivesExpired = expired,
+            comboStreak = 0,
+            lastCorrectElapsedMillis = null,
+            countedCells = emptySet(),
         )
     }
 

@@ -11,6 +11,7 @@ data class Cell(
     val isGiven: Boolean = false,
     val notes: Int = 0,
     val isError: Boolean = false,
+    val combo: Boolean = false,
 ) {
     val isEmpty: Boolean get() = value == 0
 

@@ -113,8 +113,8 @@ class GameEngineTest {
         assertEquals(3, current.comboStreak)
         assertEquals(10_000L, current.lastCorrectElapsedMillis)
         assertTrue(indices[2] in current.countedCells)
-        assertTrue(indices[2] in current.comboCells)
-        assertFalse(indices[0] in current.comboCells)
+        assertTrue(current.cells[indices[2]].combo)
+        assertFalse(current.cells[indices[0]].combo)
     }
 
     @Test
@@ -129,7 +129,7 @@ class GameEngineTest {
 
         assertEquals(1, second.comboStreak)
         assertEquals(GameRules.COMBO_WINDOW_MILLIS + 1L, second.lastCorrectElapsedMillis)
-        assertFalse(indices[1] in second.comboCells)
+        assertFalse(second.cells[indices[1]].combo)
     }
 
     @Test
@@ -182,7 +182,7 @@ class GameEngineTest {
         }
 
         assertTrue(hintIndex in current.countedCells)
-        assertFalse(hintIndex in current.comboCells)
+        assertFalse(current.cells[hintIndex].combo)
         assertEquals(3, current.comboStreak)
     }
 }

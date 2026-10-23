@@ -21,7 +21,7 @@ data class ScoreBreakdown(
  *
  * ```
  * entries   = correct, player-entered (non-given, non-hint) cells × basePoints(gridSize)
- * combo     = correct comboCells × basePoints(gridSize)
+ * combo     = currently correct cells marked combo × basePoints(gridSize)
  * penalty   = mistakes × MISTAKE_PENALTY
  * bonus     = only when complete and under targetTime: basePoints × emptyCells × timeLeft / targetTime
  * total     = max(0, (entries + combo − penalty + bonus) × multiplier(difficulty))
@@ -59,9 +59,9 @@ object ScoringRules {
     fun breakdown(state: GameState): ScoreBreakdown {
         val base = basePoints(state.gridSize)
         val correct = (correctPlayerCells(state) - state.hintsUsed).coerceAtLeast(0)
-        val comboBonus = state.comboCells.count { index ->
+        val comboBonus = state.cells.indices.count { index ->
             val cell = state.cells[index]
-            !cell.isGiven && cell.value != 0 && cell.value == state.puzzle.solution[index]
+            cell.combo && !cell.isGiven && cell.value == state.puzzle.solution[index]
         } * base
         val penalty = state.mistakes * MISTAKE_PENALTY
         val bonus = if (state.isComplete) timeBonus(state, base) else 0

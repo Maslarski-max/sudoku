@@ -22,7 +22,6 @@ data class GameState(
     val comboStreak: Int = 0,
     val lastCorrectElapsedMillis: Long? = null,
     val countedCells: Set<Int> = emptySet(),
-    val comboCells: Set<Int> = emptySet(),
 ) {
     val gridSize: GridSize get() = puzzle.gridSize
     val difficulty: Difficulty get() = puzzle.difficulty

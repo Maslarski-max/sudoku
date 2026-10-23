@@ -297,11 +297,14 @@ class GameViewModelTest {
 
     @Test
     fun `countdown reset restores givens and preserves hint usage`() = vmTest {
-        val enteredIndex = initial.firstEmpty()
+        val comboIndices = initial.cells.indices.filter { initial.cells[it].isEmpty }.take(3)
+        val engine = GameEngine()
+        comboIndices.forEachIndexed { position, index ->
+            initial = initial.copy(elapsedMillis = position * 1_000L)
+            initial = engine.enterValue(initial, index, initial.puzzle.solution[index]).state
+        }
+        val previouslyComboIndex = comboIndices.last()
         initial = initial.copy(
-            cells = initial.cells.toMutableList().also {
-                it[enteredIndex] = Cell(value = initial.puzzle.solution[enteredIndex])
-            },
             elapsedMillis = 123_456L,
             moves = 12,
             mistakes = 8,
@@ -328,11 +331,26 @@ class GameViewModelTest {
         assertTrue(reset.redoStack.isEmpty())
         assertNull(reset.outOfLivesDeadlineEpochMillis)
         assertTrue(reset.outOfLivesExpired)
+        assertEquals(0, reset.comboStreak)
+        assertNull(reset.lastCorrectElapsedMillis)
+        assertTrue(reset.countedCells.isEmpty())
+        assertFalse(reset.cells[previouslyComboIndex].combo)
         assertEquals(reset.cells, games.saved[GridSize.NINE]?.cells)
         assertTrue(vm.uiState.value.progressReset)
         assertNull(vm.uiState.value.outOfLivesSecondsLeft)
         assertEquals(-1, vm.uiState.value.selectedIndex)
         assertNull(vm.uiState.value.activeHint)
+
+        lives.addLives(5)
+        settle()
+        vm.selectCell(previouslyComboIndex)
+        vm.enterNumber(initial.puzzle.solution[previouslyComboIndex])
+        settle()
+
+        val reentered = vm.uiState.value.game!!
+        assertEquals(1, reentered.comboStreak)
+        assertFalse(reentered.cells[previouslyComboIndex].combo)
+        assertEquals(0, vm.uiState.value.score?.comboBonus)
     }
 
     @Test

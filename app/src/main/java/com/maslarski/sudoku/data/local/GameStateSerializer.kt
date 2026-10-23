@@ -22,10 +22,10 @@ class GameStateSerializer @Inject constructor() {
     fun decode(raw: String): GameState = json.decodeFromString<Snapshot>(raw).toState()
 
     @Serializable
-    private data class CellDto(val v: Int, val g: Boolean, val n: Int, val e: Boolean) {
-        fun toCell() = Cell(value = v, isGiven = g, notes = n, isError = e)
+    private data class CellDto(val v: Int, val g: Boolean, val n: Int, val e: Boolean, val c: Boolean = false) {
+        fun toCell() = Cell(value = v, isGiven = g, notes = n, isError = e, combo = c)
         companion object {
-            fun from(c: Cell) = CellDto(c.value, c.isGiven, c.notes, c.isError)
+            fun from(cell: Cell) = CellDto(cell.value, cell.isGiven, cell.notes, cell.isError, cell.combo)
         }
     }
 
@@ -60,7 +60,6 @@ class GameStateSerializer @Inject constructor() {
         val comboStreak: Int = 0,
         val lastCorrectElapsedMillis: Long? = null,
         val countedCells: List<Int> = emptyList(),
-        val comboCells: List<Int> = emptyList(),
     ) {
         fun toState(): GameState = GameState(
             puzzle = Puzzle(
@@ -86,7 +85,6 @@ class GameStateSerializer @Inject constructor() {
             comboStreak = comboStreak,
             lastCorrectElapsedMillis = lastCorrectElapsedMillis,
             countedCells = countedCells.toSet(),
-            comboCells = comboCells.toSet(),
         )
 
         companion object {
@@ -112,7 +110,6 @@ class GameStateSerializer @Inject constructor() {
                 comboStreak = s.comboStreak,
                 lastCorrectElapsedMillis = s.lastCorrectElapsedMillis,
                 countedCells = s.countedCells.sorted(),
-                comboCells = s.comboCells.sorted(),
             )
         }
     }

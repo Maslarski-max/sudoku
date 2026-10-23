@@ -18,15 +18,22 @@ class GameStateSerializerTest {
     )
 
     @Test
-    fun `out-of-lives deadline and expired state are persisted`() {
+    fun `out-of-lives deadline and cell combo state are persisted`() {
+        val comboIndex = game.cells.indexOfFirst { !it.isGiven }
+        val cells = game.cells.toMutableList().also {
+            it[comboIndex] = it[comboIndex].copy(
+                value = game.puzzle.solution[comboIndex],
+                combo = true,
+            )
+        }
         val encoded = serializer.encode(
             game.copy(
+                cells = cells,
                 outOfLivesDeadlineEpochMillis = 1_700_000_060_000L,
                 outOfLivesExpired = true,
                 comboStreak = 3,
                 lastCorrectElapsedMillis = 20_000L,
                 countedCells = setOf(4, 9, 12),
-                comboCells = setOf(12),
             ),
         )
         val restored = serializer.decode(encoded)
@@ -36,7 +43,7 @@ class GameStateSerializerTest {
         assertEquals(3, restored.comboStreak)
         assertEquals(20_000L, restored.lastCorrectElapsedMillis)
         assertEquals(setOf(4, 9, 12), restored.countedCells)
-        assertEquals(setOf(12), restored.comboCells)
+        assertTrue(restored.cells[comboIndex].combo)
     }
 
     @Test
@@ -44,9 +51,9 @@ class GameStateSerializerTest {
         val encoded = serializer.encode(game)
             .replace(
                 ",\"outOfLivesDeadline\":null,\"outOfLivesExpired\":false,\"comboStreak\":0," +
-                    "\"lastCorrectElapsedMillis\":null,\"countedCells\":[],\"comboCells\":[]",
+                    "\"lastCorrectElapsedMillis\":null,\"countedCells\":[]",
                 "",
-            )
+            ).replace(",\"c\":false", "")
         val restored = serializer.decode(encoded)
 
         assertNull(restored.outOfLivesDeadlineEpochMillis)
@@ -54,7 +61,7 @@ class GameStateSerializerTest {
         assertEquals(0, restored.comboStreak)
         assertNull(restored.lastCorrectElapsedMillis)
         assertEquals(emptySet<Int>(), restored.countedCells)
-        assertEquals(emptySet<Int>(), restored.comboCells)
+        assertTrue(restored.cells.none { it.combo })
     }
 
     @Test
@@ -62,5 +69,17 @@ class GameStateSerializerTest {
         val encoded = serializer.encode(game).replace(",\"outOfLivesExpired\":false", "")
 
         assertFalse(serializer.decode(encoded).outOfLivesExpired)
+    }
+
+    @Test
+    fun `legacy comboCells property is ignored and missing cell combo defaults false`() {
+        val comboIndex = game.cells.indexOfFirst { !it.isGiven }
+        val legacyJson = serializer.encode(game)
+            .replace(",\"c\":false", "")
+            .dropLast(1) + ",\"comboCells\":[$comboIndex]}"
+
+        val restored = serializer.decode(legacyJson)
+
+        assertFalse(restored.cells[comboIndex].combo)
     }
 }

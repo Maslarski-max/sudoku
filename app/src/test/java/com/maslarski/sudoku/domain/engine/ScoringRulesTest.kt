@@ -120,11 +120,60 @@ class ScoringRulesTest {
 
         val erased = engine.erase(game, indices[3])
         val erasedScore = ScoringRules.breakdown(erased)
-        assertFalse(indices[3] in erased.comboCells)
+        assertFalse(erased.cells[indices[3]].combo)
         assertEquals(base, erasedScore.comboBonus)
         assertEquals(
             ((erasedScore.basePoints + erasedScore.comboBonus) * erasedScore.multiplier).toInt(),
             erasedScore.total,
         )
+    }
+
+    @Test
+    fun `wrong overwrite then correcting counted combo cell does not restore bonus`() {
+        val start = newGame()
+        val indices = start.cells.indices.filter { start.cells[it].isEmpty }.take(3)
+        var game = start
+        indices.forEachIndexed { position, index ->
+            game = game.copy(elapsedMillis = position * 1_000L)
+            game = engine.enterValue(game, index, game.puzzle.solution[index]).state
+        }
+        val comboIndex = indices.last()
+        assertTrue(game.cells[comboIndex].combo)
+
+        val wrong = (1..9).first { it != game.puzzle.solution[comboIndex] }
+        val overwritten = engine.enterValue(game, comboIndex, wrong).state
+        assertFalse(overwritten.cells[comboIndex].combo)
+        assertEquals(0, ScoringRules.breakdown(overwritten).comboBonus)
+
+        val corrected = engine.enterValue(
+            overwritten,
+            comboIndex,
+            game.puzzle.solution[comboIndex],
+        ).state
+        assertFalse(corrected.cells[comboIndex].combo)
+        assertEquals(0, ScoringRules.breakdown(corrected).comboBonus)
+    }
+
+    @Test
+    fun `undoing and redoing combo erase restores and removes its bonus`() {
+        val start = newGame()
+        val indices = start.cells.indices.filter { start.cells[it].isEmpty }.take(3)
+        var game = start
+        indices.forEachIndexed { position, index ->
+            game = game.copy(elapsedMillis = position * 1_000L)
+            game = engine.enterValue(game, index, game.puzzle.solution[index]).state
+        }
+        val comboIndex = indices.last()
+        val base = ScoringRules.basePoints(game.gridSize)
+        assertEquals(base, ScoringRules.breakdown(game).comboBonus)
+
+        val erased = engine.erase(game, comboIndex)
+        assertEquals(0, ScoringRules.breakdown(erased).comboBonus)
+        val undone = engine.undo(erased)
+        assertTrue(undone.cells[comboIndex].combo)
+        assertEquals(base, ScoringRules.breakdown(undone).comboBonus)
+        val redone = engine.redo(undone)
+        assertFalse(redone.cells[comboIndex].combo)
+        assertEquals(0, ScoringRules.breakdown(redone).comboBonus)
     }
 }
