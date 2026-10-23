@@ -196,6 +196,7 @@ fun GameScreen(
                 }
             }
         }
+        val boardGame = remember(game.cells, game.puzzle, game.iconMode) { game }
 
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp),
@@ -204,7 +205,7 @@ fun GameScreen(
             StatusRow(game = game, state = state)
 
             SudokuBoard(
-                game = game,
+                game = boardGame,
                 selectedIndex = state.selectedIndex,
                 activeHint = state.activeHint,
                 candidateMasks = candidateMasks,
