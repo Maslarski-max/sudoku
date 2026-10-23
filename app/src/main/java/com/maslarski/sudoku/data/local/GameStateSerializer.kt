@@ -22,10 +22,10 @@ class GameStateSerializer @Inject constructor() {
     fun decode(raw: String): GameState = json.decodeFromString<Snapshot>(raw).toState()
 
     @Serializable
-    private data class CellDto(val v: Int, val g: Boolean, val n: Int, val e: Boolean) {
-        fun toCell() = Cell(value = v, isGiven = g, notes = n, isError = e)
+    private data class CellDto(val v: Int, val g: Boolean, val n: Int, val e: Boolean, val c: Boolean = false) {
+        fun toCell() = Cell(value = v, isGiven = g, notes = n, isError = e, combo = c)
         companion object {
-            fun from(c: Cell) = CellDto(c.value, c.isGiven, c.notes, c.isError)
+            fun from(cell: Cell) = CellDto(cell.value, cell.isGiven, cell.notes, cell.isError, cell.combo)
         }
     }
 
@@ -55,6 +55,11 @@ class GameStateSerializer @Inject constructor() {
         val isComplete: Boolean,
         val startedAt: Long,
         val lastPlayedAt: Long,
+        val outOfLivesDeadline: Long? = null,
+        val outOfLivesExpired: Boolean = false,
+        val comboStreak: Int = 0,
+        val lastCorrectElapsedMillis: Long? = null,
+        val countedCells: List<Int> = emptyList(),
     ) {
         fun toState(): GameState = GameState(
             puzzle = Puzzle(
@@ -75,6 +80,11 @@ class GameStateSerializer @Inject constructor() {
             isComplete = isComplete,
             startedAtEpochMillis = startedAt,
             lastPlayedEpochMillis = lastPlayedAt,
+            outOfLivesDeadlineEpochMillis = outOfLivesDeadline,
+            outOfLivesExpired = outOfLivesExpired,
+            comboStreak = comboStreak,
+            lastCorrectElapsedMillis = lastCorrectElapsedMillis,
+            countedCells = countedCells.toSet(),
         )
 
         companion object {
@@ -95,6 +105,11 @@ class GameStateSerializer @Inject constructor() {
                 isComplete = s.isComplete,
                 startedAt = s.startedAtEpochMillis,
                 lastPlayedAt = s.lastPlayedEpochMillis,
+                outOfLivesDeadline = s.outOfLivesDeadlineEpochMillis,
+                outOfLivesExpired = s.outOfLivesExpired,
+                comboStreak = s.comboStreak,
+                lastCorrectElapsedMillis = s.lastCorrectElapsedMillis,
+                countedCells = s.countedCells.sorted(),
             )
         }
     }

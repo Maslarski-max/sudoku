@@ -6,6 +6,9 @@ import com.maslarski.sudoku.domain.engine.GameEngine
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.Cell
+import com.maslarski.sudoku.domain.model.AppSettings
+import com.maslarski.sudoku.domain.model.AppTheme
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.LeaderboardCategory
@@ -14,10 +17,15 @@ import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.model.Score
 import com.maslarski.sudoku.domain.repository.AuthRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
+import com.maslarski.sudoku.domain.repository.GameFeedback
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
+import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
+import com.maslarski.sudoku.domain.repository.SettingsRepository
+import com.maslarski.sudoku.domain.time.EpochClock
 import com.maslarski.sudoku.domain.usecase.SubmitScoreUseCase
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -46,6 +54,13 @@ class GameViewModelTest {
     private val games = FakeGameRepository()
     private val lives = FakeLivesRepository()
     private val leaderboard = FakeLeaderboardRepository()
+    private val reviewPrompt = FakeReviewPromptRepository()
+    private val feedback = RecordingGameFeedback()
+    private val settings = FakeSettingsRepository()
+    private var clockOffsetMillis = 0L
+    private val clock = EpochClock {
+        1_700_000_000_000L + dispatcher.scheduler.currentTime + clockOffsetMillis
+    }
     private val store = ViewModelStore()
 
     @Before
@@ -77,6 +92,10 @@ class GameViewModelTest {
         engine = GameEngine(),
         hintEngine = HintEngine(),
         submitScore = submitScore,
+        reviewPrompt = reviewPrompt,
+        feedback = feedback,
+        settingsRepository = settings,
+        clock = clock,
     ).also { store.put("game", it) }
 
     /** The timer ticks forever, so advance a bounded amount of virtual time instead of idling. */
@@ -173,6 +192,56 @@ class GameViewModelTest {
     }
 
     @Test
+    fun `request hint targets selected cell and preserves selection`() = vmTest {
+        val vm = viewModel()
+        settle()
+        val nextIndex = HintEngine().nextHint(initial).index
+        val selected = initial.emptyCells().first { it != nextIndex }
+        vm.selectCell(selected)
+        vm.requestHint()
+        assertEquals(selected, vm.uiState.value.selectedIndex)
+        assertEquals(selected, vm.uiState.value.activeHint?.index)
+        assertEquals(initial.puzzle.solution[selected], vm.uiState.value.activeHint?.value)
+    }
+
+    @Test
+    fun `request hint without selection selects the next hint cell`() = vmTest {
+        val vm = viewModel()
+        settle()
+        val expected = HintEngine().nextHint(initial).index
+        vm.requestHint()
+        assertEquals(expected, vm.uiState.value.selectedIndex)
+        assertEquals(expected, vm.uiState.value.activeHint?.index)
+    }
+
+    @Test
+    fun `selecting a cell records selection feedback`() = vmTest {
+        val vm = viewModel()
+        settle()
+
+        vm.selectCell(initial.firstEmpty())
+
+        assertEquals(listOf("select"), feedback.events)
+    }
+
+    @Test
+    fun `wrong entry records mistake feedback and correct entry does not`() = vmTest {
+        val vm = viewModel()
+        settle()
+        val index = initial.firstEmpty()
+        vm.selectCell(index)
+        feedback.events.clear()
+        vm.enterNumber(initial.wrongValueFor(index))
+        assertEquals(listOf("mistake"), feedback.events)
+
+        val correctIndex = initial.emptyCells().drop(1).first()
+        vm.selectCell(correctIndex)
+        feedback.events.clear()
+        vm.enterNumber(initial.puzzle.solution[correctIndex])
+        assertTrue(feedback.events.isEmpty())
+    }
+
+    @Test
     fun `premium players are not limited to three hints`() = vmTest {
         lives.state.value = Lives(count = 0, unlimited = true)
         val vm = viewModel()
@@ -199,6 +268,267 @@ class GameViewModelTest {
         settle()
         assertEquals(PauseReason.NONE, vm.uiState.value.pauseReason)
         assertFalse(vm.uiState.value.outOfLives)
+        assertNull(vm.uiState.value.game?.outOfLivesDeadlineEpochMillis)
+        assertNull(games.saved[GridSize.NINE]?.outOfLivesDeadlineEpochMillis)
+    }
+
+    @Test
+    fun `buying lives during countdown resumes without changing the board`() = vmTest {
+        lives.state.value = Lives(count = 0, unlimited = false)
+        val vm = viewModel()
+        dispatcher.scheduler.runCurrent()
+        assertEquals(60, vm.uiState.value.outOfLivesSecondsLeft)
+        assertEquals(
+            clock.now() + 60_000L,
+            games.saved[GridSize.NINE]?.outOfLivesDeadlineEpochMillis,
+        )
+        val before = vm.uiState.value.game!!.cells
+
+        dispatcher.scheduler.advanceTimeBy(30_000L)
+        dispatcher.scheduler.runCurrent()
+        assertEquals(30, vm.uiState.value.outOfLivesSecondsLeft)
+        lives.addLives(5)
+        settle()
+
+        assertEquals(PauseReason.NONE, vm.uiState.value.pauseReason)
+        assertNull(vm.uiState.value.outOfLivesSecondsLeft)
+        assertEquals(before, vm.uiState.value.game?.cells)
+    }
+
+    @Test
+    fun `countdown reset restores givens and preserves hint usage`() = vmTest {
+        val comboIndices = initial.cells.indices.filter { initial.cells[it].isEmpty }.take(3)
+        val engine = GameEngine()
+        comboIndices.forEachIndexed { position, index ->
+            initial = initial.copy(elapsedMillis = position * 1_000L)
+            initial = engine.enterValue(initial, index, initial.puzzle.solution[index]).state
+        }
+        val previouslyComboIndex = comboIndices.last()
+        initial = initial.copy(
+            elapsedMillis = 123_456L,
+            moves = 12,
+            mistakes = 8,
+            mistakeStreak = 2,
+            hintsUsed = 2,
+            startedAtEpochMillis = 42L,
+        )
+        games.saved[GridSize.NINE] = initial
+        lives.state.value = Lives(count = 0, unlimited = false)
+        val vm = viewModel()
+        settle()
+        dispatcher.scheduler.advanceTimeBy(61_000L)
+        dispatcher.scheduler.runCurrent()
+
+        val reset = vm.uiState.value.game!!
+        assertEquals(initial.puzzle.givens.toList(), reset.cells.map { it.value })
+        assertEquals(initial.elapsedMillis, reset.elapsedMillis)
+        assertEquals(initial.moves, reset.moves)
+        assertEquals(initial.mistakes, reset.mistakes)
+        assertEquals(initial.mistakeStreak, reset.mistakeStreak)
+        assertEquals(2, reset.hintsUsed)
+        assertEquals(initial.startedAtEpochMillis, reset.startedAtEpochMillis)
+        assertTrue(reset.undoStack.isEmpty())
+        assertTrue(reset.redoStack.isEmpty())
+        assertNull(reset.outOfLivesDeadlineEpochMillis)
+        assertTrue(reset.outOfLivesExpired)
+        assertEquals(0, reset.comboStreak)
+        assertNull(reset.lastCorrectElapsedMillis)
+        assertTrue(reset.countedCells.isEmpty())
+        assertFalse(reset.cells[previouslyComboIndex].combo)
+        assertEquals(reset.cells, games.saved[GridSize.NINE]?.cells)
+        assertTrue(vm.uiState.value.progressReset)
+        assertNull(vm.uiState.value.outOfLivesSecondsLeft)
+        assertEquals(-1, vm.uiState.value.selectedIndex)
+        assertNull(vm.uiState.value.activeHint)
+
+        lives.addLives(5)
+        settle()
+        vm.selectCell(previouslyComboIndex)
+        vm.enterNumber(initial.puzzle.solution[previouslyComboIndex])
+        settle()
+
+        val reentered = vm.uiState.value.game!!
+        assertEquals(1, reentered.comboStreak)
+        assertFalse(reentered.cells[previouslyComboIndex].combo)
+        assertEquals(0, vm.uiState.value.score?.comboBonus)
+    }
+
+    @Test
+    fun `reopened countdown uses persisted deadline`() = vmTest {
+        lives.state.value = Lives(count = 0, unlimited = false)
+        val deadline = clock.now() + 10_000L
+        games.saved[GridSize.NINE] = initial.copy(outOfLivesDeadlineEpochMillis = deadline)
+        val vm = viewModel()
+        dispatcher.scheduler.runCurrent()
+
+        assertTrue((vm.uiState.value.outOfLivesSecondsLeft ?: 60) <= 10)
+        assertTrue((vm.uiState.value.outOfLivesSecondsLeft ?: 0) > 0)
+        assertEquals(deadline, vm.uiState.value.game?.outOfLivesDeadlineEpochMillis)
+    }
+
+    @Test
+    fun `reopened expired deadline resets immediately`() = vmTest {
+        lives.state.value = Lives(count = 0, unlimited = false)
+        val enteredIndex = initial.firstEmpty()
+        games.saved[GridSize.NINE] = initial.copy(
+            cells = initial.cells.toMutableList().also {
+                it[enteredIndex] = Cell(value = initial.puzzle.solution[enteredIndex])
+            },
+            elapsedMillis = 90_000L,
+            moves = 7,
+            mistakes = 5,
+            mistakeStreak = 2,
+            hintsUsed = 1,
+            outOfLivesDeadlineEpochMillis = clock.now() - 1L,
+        )
+        val vm = viewModel()
+        dispatcher.scheduler.runCurrent()
+
+        val reset = vm.uiState.value.game!!
+        assertEquals(initial.puzzle.givens.toList(), reset.cells.map { it.value })
+        assertEquals(90_000L, reset.elapsedMillis)
+        assertEquals(7, reset.moves)
+        assertEquals(5, reset.mistakes)
+        assertEquals(2, reset.mistakeStreak)
+        assertEquals(1, reset.hintsUsed)
+        assertTrue(vm.uiState.value.progressReset)
+        assertNull(reset.outOfLivesDeadlineEpochMillis)
+        assertTrue(reset.outOfLivesExpired)
+    }
+
+    @Test
+    fun `past deadline at load with lives available resets board and keeps stats`() = vmTest {
+        lives.state.value = Lives(count = 5, unlimited = false)
+        val enteredIndex = initial.firstEmpty()
+        val saved = initial.copy(
+            cells = initial.cells.toMutableList().also {
+                it[enteredIndex] = Cell(value = initial.puzzle.solution[enteredIndex])
+            },
+            elapsedMillis = 72_000L,
+            moves = 9,
+            mistakes = 4,
+            mistakeStreak = 1,
+            hintsUsed = 2,
+            startedAtEpochMillis = 123L,
+            outOfLivesDeadlineEpochMillis = clock.now() - 1L,
+        )
+        games.saved[GridSize.NINE] = saved
+        val loadGate = CompletableDeferred<Unit>()
+        games.loadGate = loadGate
+        val vm = viewModel()
+        dispatcher.scheduler.runCurrent()
+        assertEquals(Lives(count = 5, unlimited = false), vm.uiState.value.lives)
+        loadGate.complete(Unit)
+        dispatcher.scheduler.runCurrent()
+
+        val settled = vm.uiState.value.game!!
+        assertEquals(initial.puzzle.givens.toList(), settled.cells.map { it.value })
+        assertEquals(saved.elapsedMillis, settled.elapsedMillis)
+        assertEquals(saved.moves, settled.moves)
+        assertEquals(saved.mistakes, settled.mistakes)
+        assertEquals(saved.mistakeStreak, settled.mistakeStreak)
+        assertEquals(saved.hintsUsed, settled.hintsUsed)
+        assertEquals(saved.startedAtEpochMillis, settled.startedAtEpochMillis)
+        assertNull(settled.outOfLivesDeadlineEpochMillis)
+        assertFalse(settled.outOfLivesExpired)
+        assertEquals(PauseReason.NONE, vm.uiState.value.pauseReason)
+        assertFalse(vm.uiState.value.progressReset)
+        assertEquals(settled.cells, games.saved[GridSize.NINE]?.cells)
+    }
+
+    @Test
+    fun `lives restored after deadline passes settle board before countdown tick`() = vmTest {
+        lives.state.value = Lives(count = 0, unlimited = false)
+        val enteredIndex = initial.firstEmpty()
+        val saved = initial.copy(
+            cells = initial.cells.toMutableList().also {
+                it[enteredIndex] = Cell(value = initial.puzzle.solution[enteredIndex])
+            },
+            elapsedMillis = 72_000L,
+            moves = 9,
+            mistakes = 4,
+            mistakeStreak = 1,
+            hintsUsed = 2,
+            startedAtEpochMillis = 123L,
+            outOfLivesDeadlineEpochMillis = clock.now() + 60_000L,
+        )
+        games.saved[GridSize.NINE] = saved
+        val vm = viewModel()
+        dispatcher.scheduler.runCurrent()
+        assertEquals(60, vm.uiState.value.outOfLivesSecondsLeft)
+
+        clockOffsetMillis = 60_001L
+        lives.addLives(5)
+        dispatcher.scheduler.runCurrent()
+
+        val settled = vm.uiState.value.game!!
+        assertEquals(initial.puzzle.givens.toList(), settled.cells.map { it.value })
+        assertEquals(saved.elapsedMillis, settled.elapsedMillis)
+        assertEquals(saved.moves, settled.moves)
+        assertEquals(saved.mistakes, settled.mistakes)
+        assertEquals(saved.mistakeStreak, settled.mistakeStreak)
+        assertEquals(saved.hintsUsed, settled.hintsUsed)
+        assertEquals(saved.startedAtEpochMillis, settled.startedAtEpochMillis)
+        assertNull(settled.outOfLivesDeadlineEpochMillis)
+        assertFalse(settled.outOfLivesExpired)
+        assertEquals(PauseReason.NONE, vm.uiState.value.pauseReason)
+        assertNull(vm.uiState.value.outOfLivesSecondsLeft)
+        assertFalse(vm.uiState.value.progressReset)
+        assertEquals(settled.cells, games.saved[GridSize.NINE]?.cells)
+    }
+
+    @Test
+    fun `expired reset survives reopen and clears expired flag when lives return`() = vmTest {
+        lives.state.value = Lives(count = 0, unlimited = false)
+        val enteredIndex = initial.firstEmpty()
+        initial = initial.copy(
+            cells = initial.cells.toMutableList().also {
+                it[enteredIndex] = Cell(value = initial.puzzle.solution[enteredIndex])
+            },
+            moves = 3,
+            hintsUsed = 1,
+        )
+        games.saved[GridSize.NINE] = initial
+
+        viewModel()
+        dispatcher.scheduler.runCurrent()
+        dispatcher.scheduler.advanceTimeBy(61_000L)
+        dispatcher.scheduler.runCurrent()
+        assertTrue(games.saved[GridSize.NINE]?.outOfLivesExpired == true)
+
+        store.clear()
+        val reopenedViewModel = viewModel()
+        dispatcher.scheduler.runCurrent()
+
+        assertTrue(reopenedViewModel.uiState.value.progressReset)
+        assertNull(reopenedViewModel.uiState.value.outOfLivesSecondsLeft)
+        assertNull(reopenedViewModel.uiState.value.game?.outOfLivesDeadlineEpochMillis)
+        assertTrue(reopenedViewModel.uiState.value.game?.outOfLivesExpired == true)
+
+        lives.addLives(5)
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals(PauseReason.NONE, reopenedViewModel.uiState.value.pauseReason)
+        assertFalse(reopenedViewModel.uiState.value.progressReset)
+        assertFalse(reopenedViewModel.uiState.value.game!!.outOfLivesExpired)
+        assertNull(reopenedViewModel.uiState.value.game?.outOfLivesDeadlineEpochMillis)
+        assertEquals(
+            initial.puzzle.givens.toList(),
+            reopenedViewModel.uiState.value.game?.cells?.map { it.value },
+        )
+    }
+
+    @Test
+    fun `candidates toggle persists the setting and updates ui state`() = vmTest {
+        val vm = viewModel()
+        settle()
+        assertFalse(vm.uiState.value.showCandidates)
+
+        vm.toggleCandidates()
+        settle()
+
+        assertTrue(vm.uiState.value.showCandidates)
+        assertTrue(settings.state.value.showCandidates)
     }
 
     @Test
@@ -229,6 +559,28 @@ class GameViewModelTest {
         assertTrue(submitted.timeMillis >= 1L)
         assertEquals(GridSize.NINE, submitted.gridSize)
         assertEquals(Difficulty.EASY, submitted.difficulty)
+    }
+
+    @Test
+    fun `fifth completed puzzle shows review prompt`() = vmTest {
+        val vm = viewModel()
+        settle()
+        completeBoard(vm)
+
+        assertEquals(5, reviewPrompt.completedCount)
+        assertTrue(vm.uiState.value.showReviewPrompt)
+    }
+
+    @Test
+    fun `review prompt persistence failure does not block score submission`() = vmTest {
+        reviewPrompt.failOnCompletion = true
+        val vm = viewModel()
+        settle()
+        completeBoard(vm)
+
+        assertEquals(ScoreSubmission.Submitted, vm.uiState.value.scoreSubmission)
+        assertEquals(1, leaderboard.submitted.size)
+        assertFalse(vm.uiState.value.showReviewPrompt)
     }
 
     @Test
@@ -274,8 +626,12 @@ class GameViewModelTest {
 
 private class FakeGameRepository : GameRepository {
     val saved = mutableMapOf<GridSize, GameState>()
+    var loadGate: CompletableDeferred<Unit>? = null
     override fun observeSavedGames(): Flow<List<SavedGameSummary>> = flowOf(emptyList())
-    override suspend fun load(gridSize: GridSize): GameState? = saved[gridSize]
+    override suspend fun load(gridSize: GridSize): GameState? {
+        loadGate?.await()
+        return saved[gridSize]
+    }
     override suspend fun save(state: GameState) { saved[state.gridSize] = state }
     override suspend fun delete(gridSize: GridSize) { saved.remove(gridSize) }
 }
@@ -294,6 +650,45 @@ private class FakeLivesRepository : LivesRepository {
     }
     override suspend fun addLives(count: Int) = state.update { it.copy(count = it.count + count) }
     override suspend fun setUnlimited(unlimited: Boolean) = state.update { it.copy(unlimited = unlimited) }
+}
+
+private class FakeReviewPromptRepository(var completedCount: Int = 4) : ReviewPromptRepository {
+    var failOnCompletion = false
+    override suspend fun onPuzzleCompleted(): Boolean {
+        if (failOnCompletion) error("review write failed")
+        completedCount++
+        return completedCount >= 5
+    }
+    override suspend fun rateNow() = Unit
+    override suspend fun later() = Unit
+    override suspend fun never() = Unit
+}
+
+private class FakeSettingsRepository : SettingsRepository {
+    val state = MutableStateFlow(AppSettings())
+    override val settings: Flow<AppSettings> get() = state
+    override suspend fun setSoundEnabled(enabled: Boolean) {
+        state.value = state.value.copy(soundEnabled = enabled)
+    }
+    override suspend fun setVibrationEnabled(enabled: Boolean) {
+        state.value = state.value.copy(vibrationEnabled = enabled)
+    }
+    override suspend fun setShowCandidates(enabled: Boolean) {
+        state.value = state.value.copy(showCandidates = enabled)
+    }
+    override suspend fun setTheme(theme: AppTheme) {
+        state.value = state.value.copy(theme = theme)
+    }
+    override suspend fun setDarkMode(darkMode: Boolean) {
+        state.value = state.value.copy(darkMode = darkMode)
+    }
+}
+
+private class RecordingGameFeedback : GameFeedback {
+    val events = mutableListOf<String>()
+    override fun cellSelected() { events += "select" }
+    override fun mistake() { events += "mistake" }
+    override fun puzzleCompleted() { events += "completed" }
 }
 
 private class FakeAuthRepository : AuthRepository {

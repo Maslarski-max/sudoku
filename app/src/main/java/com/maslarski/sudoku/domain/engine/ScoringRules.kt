@@ -9,6 +9,7 @@ import kotlin.math.roundToInt
 data class ScoreBreakdown(
     val correctEntries: Int,
     val basePoints: Int,
+    val comboBonus: Int,
     val mistakePenalty: Int,
     val timeBonus: Int,
     val multiplier: Double,
@@ -20,9 +21,10 @@ data class ScoreBreakdown(
  *
  * ```
  * entries   = correct, player-entered (non-given, non-hint) cells × basePoints(gridSize)
+ * combo     = currently correct cells marked combo × basePoints(gridSize)
  * penalty   = mistakes × MISTAKE_PENALTY
  * bonus     = only when complete and under targetTime: basePoints × emptyCells × timeLeft / targetTime
- * total     = max(0, (entries − penalty + bonus) × multiplier(difficulty))
+ * total     = max(0, (entries + combo − penalty + bonus) × multiplier(difficulty))
  * ```
  *
  * Everything is derived from [GameState] rather than accumulated, so erasing and re-entering a number,
@@ -57,13 +59,18 @@ object ScoringRules {
     fun breakdown(state: GameState): ScoreBreakdown {
         val base = basePoints(state.gridSize)
         val correct = (correctPlayerCells(state) - state.hintsUsed).coerceAtLeast(0)
+        val comboBonus = state.cells.indices.count { index ->
+            val cell = state.cells[index]
+            cell.combo && !cell.isGiven && cell.value == state.puzzle.solution[index]
+        } * base
         val penalty = state.mistakes * MISTAKE_PENALTY
         val bonus = if (state.isComplete) timeBonus(state, base) else 0
         val multiplier = multiplier(state.difficulty)
-        val raw = correct * base - penalty + bonus
+        val raw = correct * base + comboBonus - penalty + bonus
         return ScoreBreakdown(
             correctEntries = correct,
             basePoints = correct * base,
+            comboBonus = comboBonus,
             mistakePenalty = penalty,
             timeBonus = bonus,
             multiplier = multiplier,

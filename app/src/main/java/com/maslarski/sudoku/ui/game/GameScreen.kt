@@ -1,5 +1,19 @@
 package com.maslarski.sudoku.ui.game
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -45,10 +60,14 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -56,15 +75,22 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.activity.compose.LocalActivity
+import com.google.android.play.core.ktx.launchReview
+import com.google.android.play.core.ktx.requestReview
+import com.google.android.play.core.review.ReviewManagerFactory
 import com.maslarski.sudoku.R
 import com.maslarski.sudoku.domain.engine.ScoreBreakdown
 import com.maslarski.sudoku.domain.engine.ScoringRules
+import com.maslarski.sudoku.domain.engine.SudokuSolver
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.ui.components.difficultyLabel
 import com.maslarski.sudoku.ui.components.formatDuration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +103,8 @@ fun GameScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val transform = remember { BoardTransform() }
+    // Outlives ReviewDialog, which leaves composition as soon as the prompt is resolved.
+    val reviewScope = rememberCoroutineScope()
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -129,6 +157,17 @@ fun GameScreen(
             }
             return@Scaffold
         }
+        val candidateMasks = remember(game.cells, state.showCandidates) {
+            if (!state.showCandidates) {
+                null
+            } else {
+                val grid = game.valuesArray()
+                val solver = SudokuSolver(game.gridSize)
+                IntArray(game.cells.size) { index ->
+                    if (game.cells[index].isEmpty) solver.candidates(grid, index) else 0
+                }
+            }
+        }
 
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp),
@@ -140,6 +179,7 @@ fun GameScreen(
                 game = game,
                 selectedIndex = state.selectedIndex,
                 activeHint = state.activeHint,
+                candidateMasks = candidateMasks,
                 transform = transform,
                 onCellTap = viewModel::selectCell,
             )
@@ -150,6 +190,7 @@ fun GameScreen(
                 onRedo = viewModel::redo,
                 onErase = viewModel::erase,
                 onToggleNotes = viewModel::toggleNotesMode,
+                onToggleCandidates = viewModel::toggleCandidates,
                 onHint = viewModel::requestHint,
             )
 
@@ -165,6 +206,12 @@ fun GameScreen(
     if (game == null) return
 
     when {
+        state.showReviewPrompt -> ReviewDialog(
+            scope = reviewScope,
+            onRateNow = viewModel::onReviewRateNow,
+            onLater = viewModel::onReviewLater,
+            onNever = viewModel::onReviewNever,
+        )
         game.isComplete -> CompletionDialog(
             game = game,
             score = ScoringRules.breakdown(game),
@@ -174,6 +221,8 @@ fun GameScreen(
             onHome = { viewModel.discardCompletedGame(); onBack() },
         )
         state.pauseReason == PauseReason.OUT_OF_LIVES -> OutOfLivesDialog(
+            secondsLeft = state.outOfLivesSecondsLeft,
+            progressReset = state.progressReset,
             onOpenStore = onOpenStore,
             onQuit = onBack,
         )
@@ -195,17 +244,50 @@ fun GameScreen(
 
 @Composable
 private fun StatusRow(game: GameState, state: GameUiState) {
+    val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    val comboColor = if (isLight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+    val glowColor = if (isLight) comboColor.copy(alpha = 0.45f) else comboColor
+    val minBlur = if (isLight) 4f else 6f
+    val maxBlur = if (isLight) 12f else 18f
+    val glowTransition = rememberInfiniteTransition(label = "combo_glow")
+    val blurRadius by glowTransition.animateFloat(
+        initialValue = minBlur,
+        targetValue = if (state.comboActive) maxBlur else minBlur,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "combo_glow_radius",
+    )
+    val comboStyle = MaterialTheme.typography.bodyMedium.copy(
+        color = comboColor,
+        shadow = Shadow(color = glowColor, blurRadius = blurRadius),
+    )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(formatDuration(game.elapsedMillis), style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.width(16.dp))
         Text(stringResource(R.string.game_mistakes, game.mistakes), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.width(16.dp))
-        Text(stringResource(R.string.game_moves, game.moves), style = MaterialTheme.typography.bodyMedium)
+        AnimatedContent(
+            targetState = state.comboActive,
+            modifier = Modifier.width(84.dp),
+            transitionSpec = {
+                (fadeIn() + scaleIn(initialScale = 0.9f)) togetherWith
+                    (fadeOut() + scaleOut(targetScale = 0.9f))
+            },
+            label = "moves_combo",
+        ) { comboActive ->
+            if (comboActive) {
+                Text(stringResource(R.string.game_combo), style = comboStyle)
+            } else {
+                Text(stringResource(R.string.game_moves, game.moves), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
         Spacer(Modifier.width(16.dp))
         Text(
             stringResource(R.string.game_score, state.score?.total ?: 0),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
+            style = if (state.comboActive) comboStyle else MaterialTheme.typography.bodyMedium,
+            color = if (state.comboActive) comboColor else MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.weight(1f))
         Icon(Icons.Default.Favorite, contentDescription = stringResource(R.string.game_lives), tint = MaterialTheme.colorScheme.error)
@@ -229,6 +311,7 @@ private fun ActionRow(
     onRedo: () -> Unit,
     onErase: () -> Unit,
     onToggleNotes: () -> Unit,
+    onToggleCandidates: () -> Unit,
     onHint: () -> Unit,
 ) {
     val game = state.game ?: return
@@ -255,6 +338,16 @@ private fun ActionRow(
             labelText = if (hintsRemaining == null) stringResource(R.string.game_hint)
             else stringResource(R.string.game_hint_remaining, hintsRemaining),
         )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            FilledIconToggleButton(
+                checked = state.showCandidates,
+                onCheckedChange = { onToggleCandidates() },
+                enabled = enabled,
+            ) {
+                Icon(Icons.Default.GridOn, contentDescription = stringResource(R.string.game_candidates))
+            }
+            Text(stringResource(R.string.game_candidates), style = MaterialTheme.typography.labelSmall)
+        }
     }
 }
 
@@ -336,13 +429,73 @@ private fun HintDialog(hint: Hint, gridSize: GridSize, onApply: () -> Unit, onDi
 }
 
 @Composable
-private fun OutOfLivesDialog(onOpenStore: () -> Unit, onQuit: () -> Unit) {
+private fun OutOfLivesDialog(
+    secondsLeft: Int?,
+    progressReset: Boolean,
+    onOpenStore: () -> Unit,
+    onQuit: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = {},
         title = { Text(stringResource(R.string.lives_out_title)) },
-        text = { Text(stringResource(R.string.lives_out_message)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                when {
+                    progressReset -> Text(stringResource(R.string.lives_progress_reset))
+                    secondsLeft != null -> {
+                        Text(stringResource(R.string.lives_save_progress, formatDuration(secondsLeft * 1_000L)))
+                        val animated by animateFloatAsState(
+                            targetValue = secondsLeft / 60f,
+                            animationSpec = tween(durationMillis = 1_000, easing = LinearEasing),
+                            label = "outOfLivesProgress",
+                        )
+                        Box(Modifier.size(120.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                progress = { animated },
+                                strokeWidth = 8.dp,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            Text(secondsLeft.toString(), style = MaterialTheme.typography.headlineLarge)
+                        }
+                    }
+                    else -> Text(stringResource(R.string.lives_out_message))
+                }
+            }
+        },
         confirmButton = { Button(onClick = onOpenStore) { Text(stringResource(R.string.lives_go_to_store)) } },
         dismissButton = { TextButton(onClick = onQuit) { Text(stringResource(R.string.game_quit)) } },
+    )
+}
+
+@Composable
+private fun ReviewDialog(scope: CoroutineScope, onRateNow: () -> Unit, onLater: () -> Unit, onNever: () -> Unit) {
+    val context = LocalContext.current
+    val activity = LocalActivity.current
+    AlertDialog(
+        onDismissRequest = onLater,
+        title = { Text(stringResource(R.string.review_title)) },
+        text = { Text(stringResource(R.string.review_message)) },
+        confirmButton = {
+            Button(onClick = {
+                onRateNow()
+                scope.launch {
+                    try {
+                        val host = activity ?: return@launch
+                        val manager = ReviewManagerFactory.create(context)
+                        val info = manager.requestReview()
+                        manager.launchReview(host, info)
+                    } catch (_: Exception) {
+                        // Review flow is unavailable for sideloaded installs and some Play states.
+                    }
+                }
+            }) { Text(stringResource(R.string.review_rate_now)) }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onLater) { Text(stringResource(R.string.review_later)) }
+                TextButton(onClick = onNever) { Text(stringResource(R.string.review_never)) }
+            }
+        },
     )
 }
 
@@ -369,6 +522,12 @@ private fun CompletionDialog(
                     stringResource(R.string.complete_score_base, score.correctEntries, ScoringRules.basePoints(game.gridSize), score.basePoints),
                     style = MaterialTheme.typography.bodySmall,
                 )
+                if (score.comboBonus > 0) {
+                    Text(
+                        stringResource(R.string.complete_score_combo, score.comboBonus),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 if (score.mistakePenalty > 0) {
                     Text(
                         stringResource(R.string.complete_score_penalty, game.mistakes, ScoringRules.MISTAKE_PENALTY, score.mistakePenalty),
