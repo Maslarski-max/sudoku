@@ -670,6 +670,7 @@ private fun CompletionDialog(
                     ScoreSubmission.Pending -> Text(stringResource(R.string.complete_score_pending))
                     ScoreSubmission.NotPersonalBest -> Text(stringResource(R.string.complete_score_not_best))
                     ScoreSubmission.LocalOnly -> Text(stringResource(R.string.complete_local_only))
+                    ScoreSubmission.Championship -> Text(stringResource(R.string.complete_score_championship))
                     ScoreSubmission.NotSubmitted -> Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                     }

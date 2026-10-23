@@ -6,6 +6,7 @@ import com.maslarski.sudoku.domain.engine.GameEngine
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.DailyChallenge
 import com.maslarski.sudoku.domain.model.Cell
 import com.maslarski.sudoku.domain.model.AppSettings
 import com.maslarski.sudoku.domain.model.AppTheme
@@ -16,6 +17,10 @@ import com.maslarski.sudoku.domain.model.LeaderboardCategory
 import com.maslarski.sudoku.domain.model.LeaderboardEntry
 import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.model.Score
+import com.maslarski.sudoku.domain.model.TournamentBoard
+import com.maslarski.sudoku.domain.model.TournamentEntry
+import com.maslarski.sudoku.domain.model.TournamentSnapshot
+import com.maslarski.sudoku.domain.model.Trophy
 import com.maslarski.sudoku.domain.repository.AuthRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.GameFeedback
@@ -24,6 +29,8 @@ import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
 import com.maslarski.sudoku.domain.repository.SettingsRepository
+import com.maslarski.sudoku.domain.repository.TournamentRepository
+import com.maslarski.sudoku.domain.repository.TrophyRepository
 import com.maslarski.sudoku.domain.time.EpochClock
 import com.maslarski.sudoku.domain.usecase.SubmitScoreUseCase
 import kotlinx.coroutines.CompletableDeferred
@@ -56,6 +63,8 @@ class GameViewModelTest {
     private val games = FakeGameRepository()
     private val lives = FakeLivesRepository()
     private val leaderboard = FakeLeaderboardRepository()
+    private val tournaments = FakeTournamentRepository()
+    private val trophies = FakeTrophyRepository()
     private val reviewPrompt = FakeReviewPromptRepository()
     private val feedback = RecordingGameFeedback()
     private val settings = FakeSettingsRepository()
@@ -99,6 +108,8 @@ class GameViewModelTest {
         feedback = feedback,
         settingsRepository = settings,
         clock = clock,
+        tournamentRepository = tournaments,
+        trophyRepository = trophies,
     ).also { store.put("game", it) }
 
     /** The timer ticks forever, so advance a bounded amount of virtual time instead of idling. */
@@ -616,6 +627,7 @@ class GameViewModelTest {
         assertTrue(submitted.timeMillis >= 1L)
         assertEquals(GridSize.NINE, submitted.gridSize)
         assertEquals(Difficulty.EASY, submitted.difficulty)
+        assertEquals(TournamentBoard.CHAMPIONSHIP, tournaments.records.single().first)
     }
 
     @Test
@@ -686,6 +698,51 @@ class GameViewModelTest {
         assertTrue(vm.uiState.value.game?.isComplete == true)
         assertEquals(ScoreSubmission.LocalOnly, vm.uiState.value.scoreSubmission)
         assertTrue(leaderboard.submitted.isEmpty())
+        assertEquals(listOf(TournamentBoard.CHAMPIONSHIP), tournaments.records.map { it.first })
+    }
+
+    @Test
+    fun `samurai completion routes to arena and championship only`() = vmTest {
+        val puzzle = SudokuGenerator().generateVariant(Variant.SAMURAI, Difficulty.EASY, seed = 19L)
+        val emptyIndex = puzzle.givens.indexOfFirst { it == 0 }
+        val givens = puzzle.solution.copyOf().also { it[emptyIndex] = 0 }
+        val game = GameState.fromPuzzle(puzzle.copy(givens = givens), nowEpochMillis = 0L)
+        games.variantSaved[Variant.SAMURAI.slotId] = game
+        val vm = viewModel(slotId = Variant.SAMURAI.slotId)
+        settle()
+
+        vm.selectCell(emptyIndex)
+        vm.enterNumber(puzzle.solution[emptyIndex])
+        settle()
+
+        assertTrue(vm.uiState.value.game?.isComplete == true)
+        assertTrue(leaderboard.submitted.isEmpty())
+        assertEquals(
+            setOf(TournamentBoard.ARENA, TournamentBoard.CHAMPIONSHIP),
+            tournaments.records.map { it.first }.toSet(),
+        )
+    }
+
+    @Test
+    fun `daily completion stamps its date and routes only to championship`() = vmTest {
+        val emptyIndex = initial.puzzle.givens.indexOfFirst { it == 0 }
+        val givens = initial.puzzle.solution.copyOf().also { it[emptyIndex] = 0 }
+        val puzzle = initial.puzzle.copy(givens = givens)
+        val date = "2024-02-29"
+        games.variantSaved[DailyChallenge.SLOT_ID] =
+            GameState.fromPuzzle(puzzle, nowEpochMillis = 0L, dailyDate = date)
+        val vm = viewModel(slotId = DailyChallenge.SLOT_ID)
+        settle()
+
+        vm.selectCell(emptyIndex)
+        vm.enterNumber(puzzle.solution[emptyIndex])
+        settle()
+
+        assertTrue(vm.uiState.value.game?.isComplete == true)
+        assertEquals(ScoreSubmission.Championship, vm.uiState.value.scoreSubmission)
+        assertTrue(leaderboard.submitted.isEmpty())
+        assertEquals(date, trophies.completions.single().dailyDate)
+        assertEquals(listOf(TournamentBoard.CHAMPIONSHIP), tournaments.records.map { it.first })
     }
 
     private fun completeBoard(vm: GameViewModel) {
@@ -710,15 +767,16 @@ private class FakeGameRepository : GameRepository {
     }
     override suspend fun loadSlot(slotId: Int): GameState? {
         loadGate?.await()
-        return if (Variant.fromSlotId(slotId) != null) variantSaved[slotId]
+        return if (slotId == DailyChallenge.SLOT_ID || Variant.fromSlotId(slotId) != null) variantSaved[slotId]
         else GridSize.entries.firstOrNull { it.size == slotId }?.let { saved[it] }
     }
     override suspend fun save(state: GameState) {
-        if (state.variant == null) saved[state.gridSize] = state else variantSaved[state.slotId] = state
+        if (state.dailyDate != null || state.variant != null) variantSaved[state.slotId] = state
+        else saved[state.gridSize] = state
     }
     override suspend fun delete(gridSize: GridSize) { saved.remove(gridSize) }
     override suspend fun deleteSlot(slotId: Int) {
-        if (Variant.fromSlotId(slotId) != null) variantSaved.remove(slotId)
+        if (slotId == DailyChallenge.SLOT_ID || Variant.fromSlotId(slotId) != null) variantSaved.remove(slotId)
         else GridSize.entries.firstOrNull { it.size == slotId }?.let(saved::remove)
     }
 }
@@ -805,4 +863,24 @@ private class FakeLeaderboardRepository : LeaderboardRepository {
         submitted += score
         return result
     }
+}
+
+private class FakeTournamentRepository : TournamentRepository {
+    val records = mutableListOf<Triple<TournamentBoard, Long, Int>>()
+    override suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int): Result<Unit> {
+        records += Triple(board, completedAtEpochMillis, points)
+        return Result.success(Unit)
+    }
+    override suspend fun flushPending() = Unit
+    override suspend fun load(board: TournamentBoard, period: String, limit: Int) =
+        Result.success(TournamentSnapshot(board, period, emptyList<TournamentEntry>(), null))
+}
+
+private class FakeTrophyRepository : TrophyRepository {
+    val completions = mutableListOf<GameState>()
+    override val trophies: Flow<List<Trophy>> = flowOf(emptyList())
+    override suspend fun recordCompletion(state: GameState) {
+        completions += state
+    }
+    override suspend fun refreshPeriodAwards() = Unit
 }

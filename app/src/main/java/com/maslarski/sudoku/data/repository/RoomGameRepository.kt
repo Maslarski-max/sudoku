@@ -32,6 +32,7 @@ class RoomGameRepository @Inject constructor(
                 lastPlayedEpochMillis = it.lastPlayedEpochMillis,
                 variant = variant,
                 iconMode = state?.iconMode ?: false,
+                dailyDate = state?.dailyDate,
             )
         }
     }

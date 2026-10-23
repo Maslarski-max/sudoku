@@ -4,6 +4,11 @@ import com.maslarski.sudoku.domain.model.BillingAvailability
 import com.maslarski.sudoku.domain.model.BillingEvent
 import com.maslarski.sudoku.domain.model.AppSettings
 import com.maslarski.sudoku.domain.model.AppTheme
+import com.maslarski.sudoku.domain.model.DailyChallenge
+import com.maslarski.sudoku.domain.model.PendingTournamentScore
+import com.maslarski.sudoku.domain.model.TournamentBoard
+import com.maslarski.sudoku.domain.model.TournamentSnapshot
+import com.maslarski.sudoku.domain.model.Trophy
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
@@ -30,6 +35,29 @@ interface GameRepository {
     }
 }
 
+interface DailyChallengeRepository {
+    val stampedDates: Flow<Set<String>>
+    suspend fun recordStamp(date: String)
+}
+
+interface TournamentPendingQueue {
+    suspend fun entries(): List<PendingTournamentScore>
+    suspend fun add(entry: PendingTournamentScore)
+    suspend fun remove(entry: PendingTournamentScore)
+}
+
+interface TournamentRepository {
+    suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int): Result<Unit>
+    suspend fun flushPending()
+    suspend fun load(board: TournamentBoard, period: String, limit: Int = 50): Result<TournamentSnapshot>
+}
+
+interface TrophyRepository {
+    val trophies: Flow<List<Trophy>>
+    suspend fun recordCompletion(state: GameState)
+    suspend fun refreshPeriodAwards()
+}
+
 data class SavedGameSummary(
     val gridSize: GridSize,
     val difficulty: Difficulty,
@@ -38,8 +66,10 @@ data class SavedGameSummary(
     val lastPlayedEpochMillis: Long,
     val variant: Variant? = null,
     val iconMode: Boolean = false,
+    val dailyDate: String? = null,
 ) {
-    val slotId: Int get() = variant?.slotId ?: gridSize.size
+    val slotId: Int get() = if (dailyDate != null) DailyChallenge.SLOT_ID
+    else variant?.slotId ?: gridSize.size
 }
 
 interface LivesRepository {

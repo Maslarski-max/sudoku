@@ -2,6 +2,7 @@ package com.maslarski.sudoku.data.local
 
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.DailyChallenge
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.OutsideClues
@@ -132,5 +133,17 @@ class GameStateSerializerTest {
 
         assertNull(restored.puzzle.variant)
         assertNull(restored.puzzle.outsideClues)
+    }
+
+    @Test
+    fun `daily date round trips and older snapshots default it to null`() {
+        val daily = game.copy(dailyDate = "2024-02-29", iconMode = true)
+        val restored = serializer.decode(serializer.encode(daily))
+        assertEquals("2024-02-29", restored.dailyDate)
+        assertEquals(DailyChallenge.SLOT_ID, restored.slotId)
+        assertFalse(restored.iconMode)
+
+        val oldSnapshot = serializer.encode(game).replace(",\"dailyDate\":null", "")
+        assertNull(serializer.decode(oldSnapshot).dailyDate)
     }
 }

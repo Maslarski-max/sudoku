@@ -16,6 +16,10 @@ import com.maslarski.sudoku.data.local.LeaderboardDao
 import com.maslarski.sudoku.data.local.SavedGameDao
 import com.maslarski.sudoku.data.local.SudokuDatabase
 import com.maslarski.sudoku.data.repository.DataStoreLivesRepository
+import com.maslarski.sudoku.data.repository.DataStoreDailyChallengeRepository
+import com.maslarski.sudoku.data.repository.DataStoreTournamentPendingQueue
+import com.maslarski.sudoku.data.repository.DataStoreTrophyRepository
+import com.maslarski.sudoku.data.repository.FirestoreTournamentRepository
 import com.maslarski.sudoku.data.repository.DataStoreReviewPromptRepository
 import com.maslarski.sudoku.data.repository.DataStoreSettingsRepository
 import com.maslarski.sudoku.data.repository.FirebaseAuthRepository
@@ -27,6 +31,10 @@ import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.repository.AuthRepository
 import com.maslarski.sudoku.domain.repository.BillingRepository
+import com.maslarski.sudoku.domain.repository.DailyChallengeRepository
+import com.maslarski.sudoku.domain.repository.TournamentPendingQueue
+import com.maslarski.sudoku.domain.repository.TournamentRepository
+import com.maslarski.sudoku.domain.repository.TrophyRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.GameFeedback
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
@@ -128,4 +136,8 @@ abstract class RepositoryModule {
     @Binds abstract fun bindAuthRepository(impl: FirebaseAuthRepository): AuthRepository
     @Binds abstract fun bindLeaderboardRepository(impl: FirestoreLeaderboardRepository): LeaderboardRepository
     @Binds abstract fun bindBillingRepository(impl: PlayBillingRepository): BillingRepository
+    @Binds abstract fun bindDailyChallengeRepository(impl: DataStoreDailyChallengeRepository): DailyChallengeRepository
+    @Binds abstract fun bindTournamentPendingQueue(impl: DataStoreTournamentPendingQueue): TournamentPendingQueue
+    @Binds abstract fun bindTournamentRepository(impl: FirestoreTournamentRepository): TournamentRepository
+    @Binds abstract fun bindTrophyRepository(impl: DataStoreTrophyRepository): TrophyRepository
 }

@@ -6,11 +6,18 @@
     <string name="nav_leaderboard">Leaderboard</string>
     <string name="nav_store">Store</string>
     <string name="nav_settings">Settings</string>
+    <string name="nav_tournaments">Tournaments</string>
+    <string name="nav_trophy_room">Trophy Room</string>
     <string name="action_back">Back</string>
 
     <!-- Home -->
     <string name="home_title">Sudoku</string>
     <string name="home_subtitle">Pick a grid size and difficulty</string>
+    <string name="daily_challenge_title">Daily Challenge</string>
+    <string name="daily_challenge_play">Play</string>
+    <string name="daily_challenge_continue">Continue</string>
+    <string name="daily_challenge_done">Done</string>
+    <string name="daily_challenge_saved">Daily Challenge · %1$s</string>
     <string name="home_grid_size">Grid size</string>
     <string name="home_special_variations">Special Variations</string>
     <string name="variant_samurai">Samurai</string>
@@ -121,6 +128,7 @@
     <string name="complete_score_pending">Score will be submitted when you are online.</string>
     <string name="complete_score_not_best">Your personal best in this category still stands.</string>
     <string name="complete_local_only">Variation scores aren\'t sent to the global leaderboard.</string>
+    <string name="complete_score_championship">Daily Challenge scores count toward the Yearly Championship.</string>
     <string name="complete_new_game">New game</string>
     <string name="complete_view_leaderboard">Leaderboard</string>
     <string name="complete_home">Home</string>
@@ -143,6 +151,28 @@
     <string name="leaderboard_you">You</string>
     <string name="leaderboard_your_best">Your best: %1$d pts · %2$s · %3$d moves</string>
     <string name="leaderboard_no_best">You have not completed this category yet.</string>
+
+    <!-- Tournaments -->
+    <string name="tournaments_title">Tournaments</string>
+    <string name="tournaments_refresh">Refresh tournaments</string>
+    <string name="tournaments_arena">Monthly Arena</string>
+    <string name="tournaments_championship">Yearly Championship</string>
+    <string name="tournaments_arena_period">Arena · %1$s</string>
+    <string name="tournaments_championship_period">Championship · %1$s</string>
+    <string name="tournaments_error">Could not load tournament scores. Check your connection.</string>
+    <string name="tournaments_empty">No tournament scores yet.</string>
+    <string name="tournaments_your_row">Your standing</string>
+    <string name="tournaments_previous_month">Last month’s podium</string>
+    <string name="tournaments_previous_year">Last year’s podium</string>
+    <string name="tournaments_you">You</string>
+    <string name="tournaments_games">Games: %1$d</string>
+    <string name="tournaments_points">%1$d pts</string>
+
+    <!-- Trophy Room -->
+    <string name="trophy_room_title">Trophy Room</string>
+    <string name="trophy_premium_banner">Unlock premium trophies with Unlimited</string>
+    <string name="trophy_premium_unlock">Unlock Unlimited</string>
+    <string name="trophy_calendar_title">%1$s %2$d stamps</string>
 
     <!-- Store -->
     <string name="store_title">Store</string>

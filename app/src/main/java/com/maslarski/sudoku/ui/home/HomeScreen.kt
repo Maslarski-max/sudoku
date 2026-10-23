@@ -100,6 +100,45 @@ fun HomeScreen(
                 Text(stringResource(R.string.home_subtitle), style = MaterialTheme.typography.bodyLarge)
             }
             item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.daily_challenge_title), style = MaterialTheme.typography.titleMedium)
+                            Text(state.todayDate, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        if (state.todayStamped) {
+                            Text(
+                                stringResource(R.string.daily_challenge_done),
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                        } else {
+                            Button(
+                                onClick = viewModel::onDailyChallengeClicked,
+                                enabled = !state.generating,
+                            ) {
+                                if (state.generating) {
+                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                Text(
+                                    stringResource(
+                                        if (state.savedGames.any {
+                                                it.slotId == com.maslarski.sudoku.domain.model.DailyChallenge.SLOT_ID &&
+                                                    it.dailyDate == state.todayDate
+                                            }
+                                        ) R.string.daily_challenge_continue else R.string.daily_challenge_play,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            item {
                 Text(stringResource(R.string.home_grid_size), style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(8.dp))
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -295,7 +334,9 @@ private fun SavedGameCard(saved: SavedGameSummary, onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (saved.variant == null) {
+                        if (saved.dailyDate != null) {
+                            stringResource(R.string.daily_challenge_saved, saved.dailyDate)
+                        } else if (saved.variant == null) {
                             stringResource(
                                 R.string.home_continue_description,
                                 gridSizeLabel(saved.gridSize),

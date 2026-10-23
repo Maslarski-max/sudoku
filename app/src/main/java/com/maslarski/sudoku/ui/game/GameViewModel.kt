@@ -11,11 +11,15 @@ import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.domain.model.Lives
+import com.maslarski.sudoku.domain.model.TournamentBoard
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.GameFeedback
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import com.maslarski.sudoku.domain.repository.SettingsRepository
+import com.maslarski.sudoku.domain.repository.TournamentRepository
+import com.maslarski.sudoku.domain.repository.TrophyRepository
 import com.maslarski.sudoku.domain.time.EpochClock
 import com.maslarski.sudoku.domain.usecase.SubmitScoreUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -45,6 +49,7 @@ sealed interface ScoreSubmission {
     /** Completed, but did not beat the player's existing best in this category. */
     data object NotPersonalBest : ScoreSubmission
     data object LocalOnly : ScoreSubmission
+    data object Championship : ScoreSubmission
 }
 
 data class GameUiState(
@@ -90,6 +95,8 @@ class GameViewModel @Inject constructor(
     private val feedback: GameFeedback,
     private val settingsRepository: SettingsRepository,
     private val clock: EpochClock,
+    private val tournamentRepository: TournamentRepository,
+    private val trophyRepository: TrophyRepository,
 ) : ViewModel() {
 
     private val slotId: Int = checkNotNull(savedStateHandle.get<Int>("gridSize"))
@@ -125,7 +132,11 @@ class GameViewModel @Inject constructor(
                 if (game.isComplete) {
                     local.update {
                         it.copy(
-                            scoreSubmission = if (game.variant == null) ScoreSubmission.Submitted else ScoreSubmission.LocalOnly,
+                            scoreSubmission = when {
+                                game.dailyDate != null -> ScoreSubmission.Championship
+                                game.variant != null -> ScoreSubmission.LocalOnly
+                                else -> ScoreSubmission.Submitted
+                            },
                         )
                     }
                 } else {
@@ -433,10 +444,25 @@ class GameViewModel @Inject constructor(
         timerJob?.cancel()
         viewModelScope.launch {
             gameRepository.save(state)
+            val completedAt = clock.now()
+            val points = ScoringRules.points(state)
+            runCatching { trophyRepository.recordCompletion(state) }
+            if (state.dailyDate != null) {
+                runCatching { tournamentRepository.record(TournamentBoard.CHAMPIONSHIP, completedAt, points) }
+            } else if (state.variant != null) {
+                if (state.variant == Variant.SAMURAI || state.variant == Variant.FLOWER) {
+                    runCatching { tournamentRepository.record(TournamentBoard.ARENA, completedAt, points) }
+                }
+                runCatching { tournamentRepository.record(TournamentBoard.CHAMPIONSHIP, completedAt, points) }
+            } else {
+                runCatching { tournamentRepository.record(TournamentBoard.CHAMPIONSHIP, completedAt, points) }
+            }
             if (runCatching { reviewPrompt.onPuzzleCompleted() }.getOrDefault(false)) {
                 local.update { it.copy(showReviewPrompt = true) }
             }
-            val submission = if (state.variant != null) {
+            val submission = if (state.dailyDate != null) {
+                ScoreSubmission.Championship
+            } else if (state.variant != null) {
                 ScoreSubmission.LocalOnly
             } else {
                 submitScore(state).fold(
