@@ -68,6 +68,7 @@ fun SudokuBoard(
     game: GameState,
     selectedIndex: Int,
     activeHint: Hint?,
+    candidateMasks: IntArray?,
     transform: BoardTransform,
     onCellTap: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -122,6 +123,7 @@ fun SudokuBoard(
                         selectedPeers = selectedPeers,
                         activeHint = activeHint,
                         hintRelated = hintRelated,
+                        candidateMasks = candidateMasks,
                         colors = colors,
                         layouts = layoutCache,
                     )
@@ -138,6 +140,7 @@ private fun DrawScope.drawBoard(
     selectedPeers: Set<Int>,
     activeHint: Hint?,
     hintRelated: Set<Int>,
+    candidateMasks: IntArray?,
     colors: com.maslarski.sudoku.ui.theme.BoardColors,
     layouts: TextLayoutCache,
 ) {
@@ -195,11 +198,12 @@ private fun DrawScope.drawBoard(
                 layout,
                 topLeft = Offset(x + (cell - layout.size.width) / 2f, y + (cell - layout.size.height) / 2f),
             )
-        } else if (c.notes != 0) {
+        } else if ((candidateMasks?.getOrNull(index) ?: c.notes) != 0) {
+            val notes = candidateMasks?.getOrNull(index) ?: c.notes
             val subW = cell / noteCols
             val subH = cell / noteRows
             for (v in 1..n) {
-                if (!c.hasNote(v)) continue
+                if (notes and (1 shl (v - 1)) == 0) continue
                 val k = v - 1
                 val nc = k % noteCols
                 val nr = k / noteCols

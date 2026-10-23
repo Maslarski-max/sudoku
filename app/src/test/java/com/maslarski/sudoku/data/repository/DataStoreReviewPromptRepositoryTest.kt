@@ -2,12 +2,10 @@ package com.maslarski.sudoku.data.repository
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
-import com.maslarski.sudoku.domain.model.Lives
-import com.maslarski.sudoku.domain.repository.LivesRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -16,8 +14,7 @@ import org.junit.Test
 
 class DataStoreReviewPromptRepositoryTest {
     private val store = ReviewTestPreferences()
-    private val lives = ReviewTestLivesRepository()
-    private val repo = DataStoreReviewPromptRepository(store, lives)
+    private val repo = DataStoreReviewPromptRepository(store)
 
     @Test
     fun `prompt appears on fifth completion`() = runTest {
@@ -41,9 +38,9 @@ class DataStoreReviewPromptRepositoryTest {
     }
 
     @Test
-    fun `rate now disables prompt and grants one life`() = runTest {
+    fun `rate now only disables prompt`() = runTest {
         repo.rateNow()
-        assertEquals(1, lives.count)
+        assertEquals(true, store.state.value[booleanPreferencesKey("review_disabled")])
         repeat(10) { assertFalse(repo.onPuzzleCompleted()) }
     }
 }
@@ -56,12 +53,4 @@ private class ReviewTestPreferences : DataStore<Preferences> {
         state.value = next
         return next
     }
-}
-
-private class ReviewTestLivesRepository : LivesRepository {
-    var count = 0
-    override val lives: Flow<Lives> = MutableStateFlow(Lives(count = 0, unlimited = false))
-    override suspend fun consumeLife(): Boolean = false
-    override suspend fun addLives(count: Int) { this.count += count }
-    override suspend fun setUnlimited(unlimited: Boolean) = Unit
 }

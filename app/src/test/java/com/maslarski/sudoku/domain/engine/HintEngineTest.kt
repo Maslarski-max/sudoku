@@ -5,6 +5,7 @@ import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
+import com.maslarski.sudoku.domain.model.Puzzle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -53,5 +54,26 @@ class HintEngineTest {
         })
 
         assertNull(engine.hintFor(state, index))
+    }
+
+    @Test
+    fun `wrong peer making one incorrect candidate still reveals selected solution`() {
+        val solution = IntArray(GridSize.NINE.cellCount) { index ->
+            ((index / 9 * 3 + index / 9 / 3 + index % 9) % 9) + 1
+        }
+        val puzzle = Puzzle(
+            gridSize = GridSize.NINE,
+            difficulty = Difficulty.EASY,
+            givens = IntArray(GridSize.NINE.cellCount),
+            solution = solution,
+            seed = 1L,
+        )
+        val state = GameState.fromPuzzle(puzzle, nowEpochMillis = 0L).copy(
+            cells = GameState.fromPuzzle(puzzle, nowEpochMillis = 0L).cells.toMutableList().also { cells ->
+                (1..8).forEach { col -> cells[col] = Cell(value = col) }
+            },
+        )
+
+        assertEquals(Hint.Reveal(0, solution[0]), engine.hintFor(state, 0))
     }
 }

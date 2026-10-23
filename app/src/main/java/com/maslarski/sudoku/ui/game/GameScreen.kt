@@ -1,5 +1,8 @@
 package com.maslarski.sudoku.ui.game
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -34,7 +38,6 @@ import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -66,6 +69,7 @@ import com.google.android.play.core.review.ReviewManagerFactory
 import com.maslarski.sudoku.R
 import com.maslarski.sudoku.domain.engine.ScoreBreakdown
 import com.maslarski.sudoku.domain.engine.ScoringRules
+import com.maslarski.sudoku.domain.engine.SudokuSolver
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
@@ -140,6 +144,17 @@ fun GameScreen(
             }
             return@Scaffold
         }
+        val candidateMasks = remember(game.cells, state.showCandidates) {
+            if (!state.showCandidates) {
+                null
+            } else {
+                val grid = game.valuesArray()
+                val solver = SudokuSolver(game.gridSize)
+                IntArray(game.cells.size) { index ->
+                    if (game.cells[index].isEmpty) solver.candidates(grid, index) else 0
+                }
+            }
+        }
 
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp),
@@ -151,6 +166,7 @@ fun GameScreen(
                 game = game,
                 selectedIndex = state.selectedIndex,
                 activeHint = state.activeHint,
+                candidateMasks = candidateMasks,
                 transform = transform,
                 onCellTap = viewModel::selectCell,
             )
@@ -161,6 +177,7 @@ fun GameScreen(
                 onRedo = viewModel::redo,
                 onErase = viewModel::erase,
                 onToggleNotes = viewModel::toggleNotesMode,
+                onToggleCandidates = viewModel::toggleCandidates,
                 onHint = viewModel::requestHint,
             )
 
@@ -248,6 +265,7 @@ private fun ActionRow(
     onRedo: () -> Unit,
     onErase: () -> Unit,
     onToggleNotes: () -> Unit,
+    onToggleCandidates: () -> Unit,
     onHint: () -> Unit,
 ) {
     val game = state.game ?: return
@@ -274,6 +292,16 @@ private fun ActionRow(
             labelText = if (hintsRemaining == null) stringResource(R.string.game_hint)
             else stringResource(R.string.game_hint_remaining, hintsRemaining),
         )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            FilledIconToggleButton(
+                checked = state.showCandidates,
+                onCheckedChange = { onToggleCandidates() },
+                enabled = enabled,
+            ) {
+                Icon(Icons.Default.GridOn, contentDescription = stringResource(R.string.game_candidates))
+            }
+            Text(stringResource(R.string.game_candidates), style = MaterialTheme.typography.labelSmall)
+        }
     }
 }
 
@@ -370,7 +398,19 @@ private fun OutOfLivesDialog(
                     progressReset -> Text(stringResource(R.string.lives_progress_reset))
                     secondsLeft != null -> {
                         Text(stringResource(R.string.lives_save_progress, formatDuration(secondsLeft * 1_000L)))
-                        LinearProgressIndicator(progress = { secondsLeft / 60f }, modifier = Modifier.fillMaxWidth())
+                        val animated by animateFloatAsState(
+                            targetValue = secondsLeft / 60f,
+                            animationSpec = tween(durationMillis = 1_000, easing = LinearEasing),
+                            label = "outOfLivesProgress",
+                        )
+                        Box(Modifier.size(120.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                progress = { animated },
+                                strokeWidth = 8.dp,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            Text(secondsLeft.toString(), style = MaterialTheme.typography.headlineLarge)
+                        }
                     }
                     else -> Text(stringResource(R.string.lives_out_message))
                 }

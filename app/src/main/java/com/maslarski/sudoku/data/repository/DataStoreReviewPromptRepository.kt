@@ -5,7 +5,6 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
-import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -13,7 +12,6 @@ import javax.inject.Singleton
 @Singleton
 class DataStoreReviewPromptRepository @Inject constructor(
     private val dataStore: DataStore<Preferences>,
-    private val livesRepository: LivesRepository,
 ) : ReviewPromptRepository {
 
     override suspend fun onPuzzleCompleted(): Boolean {
@@ -29,7 +27,6 @@ class DataStoreReviewPromptRepository @Inject constructor(
 
     override suspend fun rateNow() {
         dataStore.edit { it[KEY_DISABLED] = true }
-        livesRepository.addLives(1)
     }
 
     override suspend fun later() {

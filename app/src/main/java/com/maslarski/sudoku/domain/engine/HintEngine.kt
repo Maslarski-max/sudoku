@@ -37,6 +37,9 @@ class HintEngine {
         if (grid[index] == solution[index] && state.cells[index].isGiven.not()) return null
         if (state.cells[index].isGiven) return null
         if (grid[index] != 0) return Hint.FixMistake(index, solution[index], grid[index])
+        if (grid.indices.any { grid[it] != 0 && grid[it] != solution[it] }) {
+            return Hint.Reveal(index, solution[index])
+        }
 
         val gridSize = state.gridSize
         val solver = SudokuSolver(gridSize)
@@ -44,7 +47,9 @@ class HintEngine {
         val mask = candidates[index]
         if (Integer.bitCount(mask) == 1) {
             val value = Integer.numberOfTrailingZeros(mask) + 1
-            return Hint.NakedSingle(index, value, peersOf(index, gridSize).filter { grid[it] != 0 })
+            if (value == solution[index]) {
+                return Hint.NakedSingle(index, value, peersOf(index, gridSize).filter { grid[it] != 0 })
+            }
         }
 
         val n = gridSize.size
@@ -58,7 +63,7 @@ class HintEngine {
         )
         for ((cells, unit) in units) {
             singleInUnit(cells, grid, candidates, unit, solution[index])
-                ?.takeIf { it.index == index }
+                ?.takeIf { it.index == index && it.value == solution[index] }
                 ?.let { return it }
         }
         return Hint.Reveal(index, solution[index])
