@@ -1,11 +1,13 @@
 package com.maslarski.sudoku.domain.engine
 
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -97,5 +99,90 @@ class GameEngineTest {
         val hint = hints.nextHint(s)
         assertTrue(hint is Hint.FixMistake)
         assertEquals(index, hint.index)
+    }
+
+    @Test
+    fun `third correct entry within combo window is counted as combo`() {
+        val indices = state.cells.indices.filter { state.cells[it].isEmpty }.take(3)
+        var current = state
+        indices.forEachIndexed { position, index ->
+            current = current.copy(elapsedMillis = position * 5_000L)
+            current = engine.enterValue(current, index, current.puzzle.solution[index]).state
+        }
+
+        assertEquals(3, current.comboStreak)
+        assertEquals(10_000L, current.lastCorrectElapsedMillis)
+        assertTrue(indices[2] in current.countedCells)
+        assertTrue(indices[2] in current.comboCells)
+        assertFalse(indices[0] in current.comboCells)
+    }
+
+    @Test
+    fun `correct entry after combo window starts a new streak`() {
+        val indices = state.cells.indices.filter { state.cells[it].isEmpty }.take(2)
+        val first = engine.enterValue(state, indices[0], state.puzzle.solution[indices[0]]).state
+        val second = engine.enterValue(
+            first.copy(elapsedMillis = GameRules.COMBO_WINDOW_MILLIS + 1L),
+            indices[1],
+            state.puzzle.solution[indices[1]],
+        ).state
+
+        assertEquals(1, second.comboStreak)
+        assertEquals(GameRules.COMBO_WINDOW_MILLIS + 1L, second.lastCorrectElapsedMillis)
+        assertFalse(indices[1] in second.comboCells)
+    }
+
+    @Test
+    fun `mistake resets combo streak and last correct time`() {
+        val indices = state.cells.indices.filter { state.cells[it].isEmpty }.take(2)
+        val first = engine.enterValue(state, indices[0], state.puzzle.solution[indices[0]]).state
+        val wrong = (1..9).first { it != state.puzzle.solution[indices[1]] }
+        val mistaken = engine.enterValue(
+            first.copy(elapsedMillis = 1_000L),
+            indices[1],
+            wrong,
+        ).state
+
+        assertEquals(0, mistaken.comboStreak)
+        assertNull(mistaken.lastCorrectElapsedMillis)
+    }
+
+    @Test
+    fun `erasing and reentering counted cell does not extend combo streak`() {
+        val indices = state.cells.indices.filter { state.cells[it].isEmpty }.take(2)
+        val first = engine.enterValue(state, indices[0], state.puzzle.solution[indices[0]]).state
+        val second = engine.enterValue(
+            first.copy(elapsedMillis = 1_000L),
+            indices[1],
+            state.puzzle.solution[indices[1]],
+        ).state
+        val erased = engine.erase(second, indices[1])
+        val reentered = engine.enterValue(
+            erased.copy(elapsedMillis = 5_000L),
+            indices[1],
+            state.puzzle.solution[indices[1]],
+        ).state
+
+        assertEquals(2, reentered.comboStreak)
+        assertEquals(1_000L, reentered.lastCorrectElapsedMillis)
+        assertTrue(indices[1] in reentered.countedCells)
+    }
+
+    @Test
+    fun `hinted cell is counted but never added to combo cells`() {
+        val indices = state.cells.indices.filter { state.cells[it].isEmpty }.take(4)
+        val hintIndex = indices[0]
+        var current = engine.applyHint(
+            state,
+            Hint.Reveal(hintIndex, state.puzzle.solution[hintIndex]),
+        )
+        indices.drop(1).forEachIndexed { position, index ->
+            current = current.copy(elapsedMillis = position * 1_000L)
+            current = engine.enterValue(current, index, current.puzzle.solution[index]).state
+        }
+
+        assertTrue(hintIndex in current.countedCells)
+        assertFalse(hintIndex in current.comboCells)
+        assertEquals(3, current.comboStreak)
     }
 }

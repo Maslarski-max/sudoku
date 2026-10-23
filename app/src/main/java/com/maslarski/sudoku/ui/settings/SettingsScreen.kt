@@ -2,13 +2,19 @@ package com.maslarski.sudoku.ui.settings
 
 import android.content.Intent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -16,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Vibration
@@ -25,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -48,14 +56,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maslarski.sudoku.BuildConfig
 import com.maslarski.sudoku.R
 import com.maslarski.sudoku.domain.model.GridSize
+import com.maslarski.sudoku.domain.model.AppTheme
+import com.maslarski.sudoku.ui.theme.ThemeSwatchColors
+import com.maslarski.sudoku.ui.theme.themeSwatchColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenStore: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val unlimited by viewModel.unlimited.collectAsStateWithLifecycle()
+    val selectedTheme = settings.theme.effective(unlimited)
     val context = LocalContext.current
     val shareText = stringResource(
         R.string.settings_share_text,
@@ -78,8 +92,23 @@ fun SettingsScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
         ) {
+            Text(
+                stringResource(R.string.settings_themes),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            AppTheme.entries.forEach { theme ->
+                ThemeOption(
+                    theme = theme,
+                    selected = selectedTheme == theme,
+                    unlocked = unlimited || !theme.isPremium,
+                    onSelect = {
+                        if (theme.isPremium && !unlimited) onOpenStore() else viewModel.setTheme(theme)
+                    },
+                )
+            }
             ListItem(
                 headlineContent = { Text(stringResource(R.string.settings_share)) },
                 leadingContent = { Icon(Icons.Default.Share, contentDescription = null) },
@@ -142,6 +171,7 @@ fun SettingsScreen(
                     Text(stringResource(R.string.settings_rule_enter))
                     Text(stringResource(R.string.settings_rule_notes))
                     Text(stringResource(R.string.settings_rule_candidates))
+                    Text(stringResource(R.string.settings_rule_combo))
                     Text(stringResource(R.string.settings_rule_hint))
                     Text(stringResource(R.string.settings_rule_free_hints))
                     Text(stringResource(R.string.settings_rule_mistakes))
@@ -182,4 +212,46 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+@Composable
+private fun ThemeOption(
+    theme: AppTheme,
+    selected: Boolean,
+    unlocked: Boolean,
+    onSelect: () -> Unit,
+) {
+    val swatch = themeSwatchColors(theme) ?: ThemeSwatchColors(
+        MaterialTheme.colorScheme.background,
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.secondary,
+    )
+    val name = when (theme) {
+        AppTheme.DEFAULT -> R.string.theme_classic
+        AppTheme.CYBERPUNK_NEON -> R.string.theme_cyberpunk_neon
+        AppTheme.RETRO_ARCADE -> R.string.theme_retro_arcade
+        AppTheme.ZEN_FOREST -> R.string.theme_zen_forest
+    }
+    ListItem(
+        headlineContent = { Text(stringResource(name)) },
+        supportingContent = {
+            if (!unlocked) Text(stringResource(R.string.theme_included_with_unlimited))
+        },
+        leadingContent = { RadioButton(selected = selected, onClick = null) },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                listOf(swatch.background, swatch.primary, swatch.secondary).forEach { color ->
+                    Box(
+                        Modifier.padding(start = 4.dp).size(14.dp)
+                            .background(color, CircleShape),
+                    )
+                }
+                if (!unlocked) {
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Default.Lock, contentDescription = null)
+                }
+            }
+        },
+        modifier = Modifier.clickable(onClick = onSelect),
+    )
 }

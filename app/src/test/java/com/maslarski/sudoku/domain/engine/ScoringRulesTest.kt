@@ -1,10 +1,12 @@
 package com.maslarski.sudoku.domain.engine
 
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -70,12 +72,16 @@ class ScoringRulesTest {
                 val i = firstEmpty(s)
                 s = engine.enterValue(s, i, s.puzzle.solution[i]).state
             }
-            // Instant completion: full time bonus (= base × empties) on top of base points.
+            // Instant completion: combo and full time bonuses are added before the multiplier.
             val fast = ScoringRules.breakdown(s.copy(elapsedMillis = 0L))
             assertEquals(empties * 10, fast.basePoints)
+            assertEquals((empties - GameRules.COMBO_MIN_STREAK + 1) * 10, fast.comboBonus)
             assertEquals(empties * 10, fast.timeBonus)
             assertEquals(ScoringRules.multiplier(difficulty), fast.multiplier, 0.0)
-            assertEquals(Math.round(empties * 20 * ScoringRules.multiplier(difficulty)).toInt(), fast.total)
+            assertEquals(
+                Math.round((empties * 20 + fast.comboBonus) * ScoringRules.multiplier(difficulty)).toInt(),
+                fast.total,
+            )
 
             // Over the target time: no bonus.
             val slow = ScoringRules.breakdown(s.copy(elapsedMillis = ScoringRules.targetTimeMillis(s) + 1))
@@ -92,5 +98,33 @@ class ScoringRulesTest {
         val s = newGame()
         assertEquals(0, ScoringRules.breakdown(s).timeBonus)
         assertTrue(hints.nextHint(s) !is Hint.None)
+    }
+
+    @Test
+    fun `combo cells add base points before difficulty multiplier and erase removes bonus`() {
+        val start = newGame(difficulty = Difficulty.MEDIUM)
+        val indices = start.cells.indices.filter { start.cells[it].isEmpty }.take(4)
+        var game = start
+        indices.forEachIndexed { position, index ->
+            game = game.copy(elapsedMillis = position * 1_000L)
+            game = engine.enterValue(game, index, game.puzzle.solution[index]).state
+        }
+
+        val score = ScoringRules.breakdown(game)
+        val base = ScoringRules.basePoints(game.gridSize)
+        assertEquals(2 * base, score.comboBonus)
+        assertEquals(
+            ((score.basePoints + score.comboBonus) * score.multiplier).toInt(),
+            score.total,
+        )
+
+        val erased = engine.erase(game, indices[3])
+        val erasedScore = ScoringRules.breakdown(erased)
+        assertFalse(indices[3] in erased.comboCells)
+        assertEquals(base, erasedScore.comboBonus)
+        assertEquals(
+            ((erasedScore.basePoints + erasedScore.comboBonus) * erasedScore.multiplier).toInt(),
+            erasedScore.total,
+        )
     }
 }

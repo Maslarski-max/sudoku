@@ -39,6 +39,7 @@
     <string name="game_mistakes">Mistakes: %1$d</string>
     <string name="game_moves">Moves: %1$d</string>
     <string name="game_score">Score: %1$d</string>
+    <string name="game_combo">COMBO ×2</string>
     <string name="game_lives">Lives</string>
     <string name="game_lives_unlimited">∞</string>
     <string name="game_pause">Pause</string>
@@ -87,6 +88,7 @@
     <string name="complete_mistakes">Mistakes: %1$d</string>
     <string name="complete_score_total">Score: %1$d</string>
     <string name="complete_score_base">%1$d correct × %2$d pts = +%3$d</string>
+    <string name="complete_score_combo">Combo bonus (×2): +%1$d</string>
     <string name="complete_score_penalty">%1$d mistakes × %2$d pts = −%3$d</string>
     <string name="complete_score_bonus">Time bonus: +%1$d (finished under %2$s)</string>
     <string name="complete_score_no_bonus">No time bonus (target %1$s)</string>
@@ -128,7 +130,7 @@
     <string name="store_five_lives_title">5 Lives</string>
     <string name="store_five_lives_description">Adds five lives instantly. Buy as many times as you like.</string>
     <string name="store_unlimited_title">Unlimited Lives</string>
-    <string name="store_unlimited_description">Removes the lives system forever. One-time purchase.</string>
+    <string name="store_unlimited_description">Removes the lives system forever and unlocks 3 premium themes: Cyberpunk Neon, Retro Arcade and Zen Forest. One-time purchase.</string>
     <string name="store_buy">Buy</string>
     <string name="store_owned">Owned</string>
     <string name="store_unavailable">Unavailable</string>
@@ -155,11 +157,18 @@
     <string name="settings_rule_enter">Select a cell and tap a number to fill it.</string>
     <string name="settings_rule_notes">Use Notes mode to add pencil marks.</string>
     <string name="settings_rule_candidates">Candidates shows every number that still fits in each empty cell.</string>
+    <string name="settings_rule_combo">Place 3 or more correct numbers within 10 seconds of each other to start a combo: every correct number during a combo scores double.</string>
     <string name="settings_rule_hint">A hint reveals the selected cell, or picks a cell if none is selected.</string>
     <string name="settings_rule_free_hints">You get 3 free hints per game (unlimited with Unlimited Lives).</string>
     <string name="settings_rule_mistakes">Every 3 mistakes cost 1 Life.</string>
     <string name="settings_rule_lives">Lives do not regenerate — get more in the Store.</string>
     <string name="settings_rule_countdown">When out of lives, you have 60 seconds to buy lives and keep your progress.</string>
+    <string name="settings_themes">Themes</string>
+    <string name="theme_classic">Classic</string>
+    <string name="theme_cyberpunk_neon">Cyberpunk Neon</string>
+    <string name="theme_retro_arcade">Retro Arcade</string>
+    <string name="theme_zen_forest">Zen Forest</string>
+    <string name="theme_included_with_unlimited">Included with Unlimited Lives</string>
     <string name="privacy_policy_text" formatted="false">Sudoku is 100% ad-free and contains no advertising or analytics SDKs.&#10;&#10;What we collect: to run the global leaderboards the app signs you in with Firebase Anonymous Authentication, which creates a random user ID. When you finish a puzzle, your score (grid size, difficulty, points, time, moves, mistakes, completion date) and an automatically generated display name are stored in Google Cloud Firestore. We do not collect your name, email address, contacts, location or photos.&#10;&#10;Purchases: in-app purchases are processed by Google Play. We never see or store your payment details.&#10;&#10;On your device: game progress, lives, purchases status and settings are stored locally and are removed when you clear the app\'s data or uninstall it.&#10;&#10;Third parties: Google Firebase and Google Play process data under Google\'s privacy policy (https://policies.google.com/privacy), which may include device and network information needed for security and reliability.&#10;&#10;Children: the app does not knowingly collect personal information from children.&#10;&#10;Contact: to ask a question or request deletion of your leaderboard data, use the developer email shown on the app\'s Google Play page.</string>
 
     <!-- Misc -->

@@ -8,6 +8,7 @@ import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.Cell
 import com.maslarski.sudoku.domain.model.AppSettings
+import com.maslarski.sudoku.domain.model.AppTheme
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.LeaderboardCategory
@@ -656,6 +657,9 @@ private class FakeSettingsRepository : SettingsRepository {
     }
     override suspend fun setShowCandidates(enabled: Boolean) {
         state.value = state.value.copy(showCandidates = enabled)
+    }
+    override suspend fun setTheme(theme: AppTheme) {
+        state.value = state.value.copy(theme = theme)
     }
 }
 

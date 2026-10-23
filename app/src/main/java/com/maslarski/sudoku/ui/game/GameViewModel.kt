@@ -62,6 +62,13 @@ data class GameUiState(
 ) {
     val isPaused: Boolean get() = pauseReason != PauseReason.NONE
     val score: ScoreBreakdown? get() = game?.let(ScoringRules::breakdown)
+    val comboActive: Boolean
+        get() = game?.let { game ->
+            val last = game.lastCorrectElapsedMillis
+            game.comboStreak >= GameRules.COMBO_MIN_STREAK &&
+                last != null &&
+                game.elapsedMillis - last <= GameRules.COMBO_WINDOW_MILLIS
+        } == true
     val outOfLives: Boolean get() = lives?.canPlay == false
     /** Null means unlimited (premium). */
     val hintsRemaining: Int? get() = game?.let { GameRules.hintsRemaining(it, lives) }

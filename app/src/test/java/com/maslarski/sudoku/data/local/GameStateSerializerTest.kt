@@ -23,22 +23,38 @@ class GameStateSerializerTest {
             game.copy(
                 outOfLivesDeadlineEpochMillis = 1_700_000_060_000L,
                 outOfLivesExpired = true,
+                comboStreak = 3,
+                lastCorrectElapsedMillis = 20_000L,
+                countedCells = setOf(4, 9, 12),
+                comboCells = setOf(12),
             ),
         )
         val restored = serializer.decode(encoded)
 
         assertEquals(1_700_000_060_000L, restored.outOfLivesDeadlineEpochMillis)
         assertTrue(restored.outOfLivesExpired)
+        assertEquals(3, restored.comboStreak)
+        assertEquals(20_000L, restored.lastCorrectElapsedMillis)
+        assertEquals(setOf(4, 9, 12), restored.countedCells)
+        assertEquals(setOf(12), restored.comboCells)
     }
 
     @Test
     fun `older snapshot without deadline and expired state uses defaults`() {
         val encoded = serializer.encode(game)
-            .replace(",\"outOfLivesDeadline\":null,\"outOfLivesExpired\":false", "")
+            .replace(
+                ",\"outOfLivesDeadline\":null,\"outOfLivesExpired\":false,\"comboStreak\":0," +
+                    "\"lastCorrectElapsedMillis\":null,\"countedCells\":[],\"comboCells\":[]",
+                "",
+            )
         val restored = serializer.decode(encoded)
 
         assertNull(restored.outOfLivesDeadlineEpochMillis)
         assertFalse(restored.outOfLivesExpired)
+        assertEquals(0, restored.comboStreak)
+        assertNull(restored.lastCorrectElapsedMillis)
+        assertEquals(emptySet<Int>(), restored.countedCells)
+        assertEquals(emptySet<Int>(), restored.comboCells)
     }
 
     @Test

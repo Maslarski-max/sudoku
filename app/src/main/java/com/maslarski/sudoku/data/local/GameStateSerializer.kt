@@ -57,6 +57,10 @@ class GameStateSerializer @Inject constructor() {
         val lastPlayedAt: Long,
         val outOfLivesDeadline: Long? = null,
         val outOfLivesExpired: Boolean = false,
+        val comboStreak: Int = 0,
+        val lastCorrectElapsedMillis: Long? = null,
+        val countedCells: List<Int> = emptyList(),
+        val comboCells: List<Int> = emptyList(),
     ) {
         fun toState(): GameState = GameState(
             puzzle = Puzzle(
@@ -79,6 +83,10 @@ class GameStateSerializer @Inject constructor() {
             lastPlayedEpochMillis = lastPlayedAt,
             outOfLivesDeadlineEpochMillis = outOfLivesDeadline,
             outOfLivesExpired = outOfLivesExpired,
+            comboStreak = comboStreak,
+            lastCorrectElapsedMillis = lastCorrectElapsedMillis,
+            countedCells = countedCells.toSet(),
+            comboCells = comboCells.toSet(),
         )
 
         companion object {
@@ -101,6 +109,10 @@ class GameStateSerializer @Inject constructor() {
                 lastPlayedAt = s.lastPlayedEpochMillis,
                 outOfLivesDeadline = s.outOfLivesDeadlineEpochMillis,
                 outOfLivesExpired = s.outOfLivesExpired,
+                comboStreak = s.comboStreak,
+                lastCorrectElapsedMillis = s.lastCorrectElapsedMillis,
+                countedCells = s.countedCells.sorted(),
+                comboCells = s.comboCells.sorted(),
             )
         }
     }

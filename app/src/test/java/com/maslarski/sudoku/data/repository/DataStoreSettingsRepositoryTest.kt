@@ -3,7 +3,9 @@ package com.maslarski.sudoku.data.repository
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.mutablePreferencesOf
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.maslarski.sudoku.domain.model.AppSettings
+import com.maslarski.sudoku.domain.model.AppTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -43,6 +45,19 @@ class DataStoreSettingsRepositoryTest {
         repo.setShowCandidates(true)
 
         assertEquals(AppSettings(showCandidates = true), repo.settings.first())
+    }
+
+    @Test
+    fun `theme persists and unknown stored value falls back to default`() = runTest {
+        repo.setTheme(AppTheme.CYBERPUNK_NEON)
+        assertEquals(AppTheme.CYBERPUNK_NEON, repo.settings.first().theme)
+
+        store.updateData { preferences ->
+            preferences.toMutablePreferences().apply {
+                this[stringPreferencesKey("settings_theme")] = "NOT_A_THEME"
+            }
+        }
+        assertEquals(AppTheme.DEFAULT, repo.settings.first().theme)
     }
 }
 

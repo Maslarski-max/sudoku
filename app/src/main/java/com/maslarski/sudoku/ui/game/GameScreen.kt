@@ -1,7 +1,18 @@
 package com.maslarski.sudoku.ui.game
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,6 +64,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -231,17 +243,46 @@ fun GameScreen(
 
 @Composable
 private fun StatusRow(game: GameState, state: GameUiState) {
+    val secondary = MaterialTheme.colorScheme.secondary
+    val glowTransition = rememberInfiniteTransition(label = "combo_glow")
+    val blurRadius by glowTransition.animateFloat(
+        initialValue = 6f,
+        targetValue = if (state.comboActive) 18f else 6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "combo_glow_radius",
+    )
+    val comboStyle = MaterialTheme.typography.bodyMedium.copy(
+        color = secondary,
+        shadow = Shadow(color = secondary, blurRadius = blurRadius),
+    )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(formatDuration(game.elapsedMillis), style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.width(16.dp))
         Text(stringResource(R.string.game_mistakes, game.mistakes), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.width(16.dp))
-        Text(stringResource(R.string.game_moves, game.moves), style = MaterialTheme.typography.bodyMedium)
+        AnimatedContent(
+            targetState = state.comboActive,
+            modifier = Modifier.width(84.dp),
+            transitionSpec = {
+                (fadeIn() + scaleIn(initialScale = 0.9f)) togetherWith
+                    (fadeOut() + scaleOut(targetScale = 0.9f))
+            },
+            label = "moves_combo",
+        ) { comboActive ->
+            if (comboActive) {
+                Text(stringResource(R.string.game_combo), style = comboStyle)
+            } else {
+                Text(stringResource(R.string.game_moves, game.moves), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
         Spacer(Modifier.width(16.dp))
         Text(
             stringResource(R.string.game_score, state.score?.total ?: 0),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
+            style = if (state.comboActive) comboStyle else MaterialTheme.typography.bodyMedium,
+            color = if (state.comboActive) secondary else MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.weight(1f))
         Icon(Icons.Default.Favorite, contentDescription = stringResource(R.string.game_lives), tint = MaterialTheme.colorScheme.error)
@@ -476,6 +517,12 @@ private fun CompletionDialog(
                     stringResource(R.string.complete_score_base, score.correctEntries, ScoringRules.basePoints(game.gridSize), score.basePoints),
                     style = MaterialTheme.typography.bodySmall,
                 )
+                if (score.comboBonus > 0) {
+                    Text(
+                        stringResource(R.string.complete_score_combo, score.comboBonus),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 if (score.mistakePenalty > 0) {
                     Text(
                         stringResource(R.string.complete_score_penalty, game.mistakes, ScoringRules.MISTAKE_PENALTY, score.mistakePenalty),

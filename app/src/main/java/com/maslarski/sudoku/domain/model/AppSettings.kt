@@ -4,4 +4,5 @@ data class AppSettings(
     val soundEnabled: Boolean = true,
     val vibrationEnabled: Boolean = true,
     val showCandidates: Boolean = false,
+    val theme: AppTheme = AppTheme.DEFAULT,
 )

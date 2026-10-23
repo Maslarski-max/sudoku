@@ -4,7 +4,9 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.maslarski.sudoku.domain.model.AppSettings
+import com.maslarski.sudoku.domain.model.AppTheme
 import com.maslarski.sudoku.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -21,6 +23,9 @@ class DataStoreSettingsRepository @Inject constructor(
             soundEnabled = preferences[KEY_SOUND] ?: true,
             vibrationEnabled = preferences[KEY_VIBRATION] ?: true,
             showCandidates = preferences[KEY_SHOW_CANDIDATES] ?: false,
+            theme = preferences[KEY_THEME]?.let { saved ->
+                AppTheme.entries.firstOrNull { it.name == saved }
+            } ?: AppTheme.DEFAULT,
         )
     }
 
@@ -36,9 +41,14 @@ class DataStoreSettingsRepository @Inject constructor(
         dataStore.edit { it[KEY_SHOW_CANDIDATES] = enabled }
     }
 
+    override suspend fun setTheme(theme: AppTheme) {
+        dataStore.edit { it[KEY_THEME] = theme.name }
+    }
+
     private companion object {
         val KEY_SOUND = booleanPreferencesKey("settings_sound")
         val KEY_VIBRATION = booleanPreferencesKey("settings_vibration")
         val KEY_SHOW_CANDIDATES = booleanPreferencesKey("settings_show_candidates")
+        val KEY_THEME = stringPreferencesKey("settings_theme")
     }
 }

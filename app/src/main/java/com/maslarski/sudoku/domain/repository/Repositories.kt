@@ -3,6 +3,7 @@ package com.maslarski.sudoku.domain.repository
 import com.maslarski.sudoku.domain.model.BillingAvailability
 import com.maslarski.sudoku.domain.model.BillingEvent
 import com.maslarski.sudoku.domain.model.AppSettings
+import com.maslarski.sudoku.domain.model.AppTheme
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
@@ -50,6 +51,7 @@ interface SettingsRepository {
     suspend fun setSoundEnabled(enabled: Boolean)
     suspend fun setVibrationEnabled(enabled: Boolean)
     suspend fun setShowCandidates(enabled: Boolean)
+    suspend fun setTheme(theme: AppTheme)
 }
 
 interface GameFeedback {
