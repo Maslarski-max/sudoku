@@ -1,6 +1,8 @@
 package com.maslarski.sudoku.ui.home
 
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
+import com.maslarski.sudoku.domain.model.AppSettings
+import com.maslarski.sudoku.domain.model.AppTheme
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
@@ -9,6 +11,7 @@ import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
+import com.maslarski.sudoku.domain.repository.SettingsRepository
 import com.maslarski.sudoku.domain.usecase.StartNewGameUseCase
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +42,7 @@ class HomeViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val games = FakeGameRepository()
     private val lives = FakeLivesRepository()
+    private val settings = FakeHomeSettingsRepository()
 
     @Before
     fun setUp() = Dispatchers.setMain(dispatcher)
@@ -49,6 +53,7 @@ class HomeViewModelTest {
     private fun viewModel() = HomeViewModel(
         gameRepository = games,
         livesRepository = lives,
+        settingsRepository = settings,
         startNewGame = StartNewGameUseCase(SudokuGenerator(), games, dispatcher),
     )
 
@@ -89,6 +94,65 @@ class HomeViewModelTest {
         assertFalse(vm.uiState.value.confirmReplace)
         assertEquals(0, lives.consumed)
         assertTrue(games.saved.value.containsKey(GridSize.NINE))
+        collector.cancel()
+    }
+
+    @Test
+    fun `enabling holiday icons starts a 9x9 game in icon mode`() = runTest(dispatcher) {
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        runCurrent()
+
+        vm.setIconMode(true)
+        runCurrent()
+        assertTrue(vm.uiState.value.iconMode)
+        assertTrue(settings.state.value.iconMode)
+
+        vm.onNewGameClicked()
+        runCurrent()
+
+        assertTrue(games.saved.value.getValue(GridSize.NINE).iconMode)
+        collector.cancel()
+    }
+
+    @Test
+    fun `15x15 game always starts in numeric mode even when holiday icons are enabled`() = runTest(dispatcher) {
+        settings.setIconMode(true)
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        runCurrent()
+
+        vm.selectGridSize(GridSize.FIFTEEN)
+        runCurrent()
+        assertTrue(vm.uiState.value.iconMode)
+
+        vm.onNewGameClicked()
+        runCurrent()
+
+        assertFalse(games.saved.value.getValue(GridSize.FIFTEEN).iconMode)
+        collector.cancel()
+    }
+
+    @Test
+    fun `variant start ignores icon setting while a later classic start uses it`() = runTest(dispatcher) {
+        settings.setIconMode(true)
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        runCurrent()
+
+        vm.selectVariant(Variant.SAMURAI)
+        runCurrent()
+        vm.onNewGameClicked()
+        runCurrent()
+
+        assertFalse(games.variantSaved.value.getValue(Variant.SAMURAI.slotId).iconMode)
+
+        vm.selectGridSize(GridSize.NINE)
+        runCurrent()
+        vm.onNewGameClicked()
+        runCurrent()
+
+        assertTrue(games.saved.value.getValue(GridSize.NINE).iconMode)
         collector.cancel()
     }
 
@@ -257,9 +321,24 @@ private class FakeGameRepository : GameRepository {
     val variantSummaries = MutableStateFlow<List<SavedGameSummary>>(emptyList())
     override fun observeSavedGames(): Flow<List<SavedGameSummary>> = combine(saved, variantSaved, variantSummaries) { m, variants, summaries ->
         m.values.map {
-            SavedGameSummary(it.gridSize, it.difficulty, it.elapsedMillis, 0f, it.lastPlayedEpochMillis)
+            SavedGameSummary(
+                it.gridSize,
+                it.difficulty,
+                it.elapsedMillis,
+                0f,
+                it.lastPlayedEpochMillis,
+                iconMode = it.iconMode,
+            )
         } + variants.values.map {
-            SavedGameSummary(it.gridSize, it.difficulty, it.elapsedMillis, 0f, it.lastPlayedEpochMillis, it.variant)
+            SavedGameSummary(
+                it.gridSize,
+                it.difficulty,
+                it.elapsedMillis,
+                0f,
+                it.lastPlayedEpochMillis,
+                variant = it.variant,
+                iconMode = it.iconMode,
+            )
         } + summaries
     }
     override suspend fun load(gridSize: GridSize): GameState? = saved.value[gridSize]
@@ -296,4 +375,27 @@ private class FakeLivesRepository : LivesRepository {
     }
     override suspend fun addLives(count: Int) = state.update { it.copy(count = it.count + count) }
     override suspend fun setUnlimited(unlimited: Boolean) = state.update { it.copy(unlimited = unlimited) }
+}
+
+private class FakeHomeSettingsRepository : SettingsRepository {
+    val state = MutableStateFlow(AppSettings())
+    override val settings: Flow<AppSettings> get() = state
+    override suspend fun setSoundEnabled(enabled: Boolean) {
+        state.update { it.copy(soundEnabled = enabled) }
+    }
+    override suspend fun setVibrationEnabled(enabled: Boolean) {
+        state.update { it.copy(vibrationEnabled = enabled) }
+    }
+    override suspend fun setShowCandidates(enabled: Boolean) {
+        state.update { it.copy(showCandidates = enabled) }
+    }
+    override suspend fun setTheme(theme: AppTheme) {
+        state.update { it.copy(theme = theme) }
+    }
+    override suspend fun setDarkMode(darkMode: Boolean) {
+        state.update { it.copy(darkMode = darkMode) }
+    }
+    override suspend fun setIconMode(iconMode: Boolean) {
+        state.update { it.copy(iconMode = iconMode) }
+    }
 }

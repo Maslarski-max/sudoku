@@ -74,6 +74,25 @@ class GameStateSerializerTest {
     }
 
     @Test
+    fun `icon mode round trips and old snapshots default to false`() {
+        val restored = serializer.decode(serializer.encode(game.copy(iconMode = true)))
+        assertEquals(GridSize.NINE, game.gridSize)
+        assertTrue(restored.iconMode)
+
+        val oldSnapshot = serializer.encode(game).replace(",\"iconMode\":false", "")
+        assertFalse(serializer.decode(oldSnapshot).iconMode)
+    }
+
+    @Test
+    fun `variant saves keep icon mode disabled`() {
+        val puzzle = SudokuGenerator().generateVariant(Variant.SAMURAI, Difficulty.EASY, seed = 11L)
+        val variantGame = GameState.fromPuzzle(puzzle, nowEpochMillis = 0L, iconMode = true)
+
+        assertFalse(variantGame.iconMode)
+        assertFalse(serializer.decode(serializer.encode(variantGame)).iconMode)
+    }
+
+    @Test
     fun `legacy comboCells property is ignored and missing cell combo defaults false`() {
         val comboIndex = game.cells.indexOfFirst { !it.isGiven }
         val legacyJson = serializer.encode(game)

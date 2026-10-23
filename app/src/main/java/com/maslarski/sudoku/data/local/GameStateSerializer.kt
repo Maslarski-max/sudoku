@@ -83,6 +83,7 @@ class GameStateSerializer @Inject constructor() {
         val countedCells: List<Int> = emptyList(),
         val variant: String? = null,
         val outsideClues: OutsideCluesDto? = null,
+        val iconMode: Boolean = false,
     ) {
         fun toState(): GameState = GameState(
             puzzle = Puzzle(
@@ -108,8 +109,9 @@ class GameStateSerializer @Inject constructor() {
             outOfLivesDeadlineEpochMillis = outOfLivesDeadline,
             outOfLivesExpired = outOfLivesExpired,
             comboStreak = comboStreak,
-                lastCorrectElapsedMillis = lastCorrectElapsedMillis,
-                countedCells = countedCells.toSet(),
+            lastCorrectElapsedMillis = lastCorrectElapsedMillis,
+            countedCells = countedCells.toSet(),
+            iconMode = iconMode,
         )
 
         companion object {
@@ -137,6 +139,7 @@ class GameStateSerializer @Inject constructor() {
                 countedCells = s.countedCells.sorted(),
                 variant = s.puzzle.variant?.name,
                 outsideClues = s.puzzle.outsideClues?.let(OutsideCluesDto::from),
+                iconMode = s.iconMode,
             )
         }
     }

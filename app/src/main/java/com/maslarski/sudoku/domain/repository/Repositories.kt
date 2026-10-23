@@ -37,6 +37,7 @@ data class SavedGameSummary(
     val filledFraction: Float,
     val lastPlayedEpochMillis: Long,
     val variant: Variant? = null,
+    val iconMode: Boolean = false,
 ) {
     val slotId: Int get() = variant?.slotId ?: gridSize.size
 }
@@ -62,6 +63,7 @@ interface SettingsRepository {
     suspend fun setShowCandidates(enabled: Boolean)
     suspend fun setTheme(theme: AppTheme)
     suspend fun setDarkMode(darkMode: Boolean)
+    suspend fun setIconMode(iconMode: Boolean)
 }
 
 interface GameFeedback {

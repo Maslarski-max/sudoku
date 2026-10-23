@@ -1,5 +1,6 @@
 package com.maslarski.sudoku.ui.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -33,6 +35,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -108,6 +111,23 @@ fun HomeScreen(
                             label = { Text(gridSizeLabel(g)) },
                         )
                     }
+                }
+            }
+            if (state.variant == null &&
+                (state.gridSize == GridSize.NINE || state.gridSize == GridSize.TWELVE)
+            ) {
+                item {
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.home_icon_mode)) },
+                        supportingContent = { Text(stringResource(R.string.home_icon_mode_supporting)) },
+                        trailingContent = {
+                            Switch(
+                                checked = state.iconMode,
+                                onCheckedChange = viewModel::setIconMode,
+                            )
+                        },
+                        modifier = Modifier.clickable { viewModel.setIconMode(!state.iconMode) },
+                    )
                 }
             }
             item {
@@ -292,6 +312,13 @@ private fun SavedGameCard(saved: SavedGameSummary, onClick: () -> Unit) {
                         },
                         style = MaterialTheme.typography.titleSmall,
                     )
+                    if (saved.iconMode && saved.variant == null) {
+                        Text(
+                            stringResource(R.string.home_saved_holiday),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
                 TextButton(onClick = onClick) { Text(stringResource(R.string.home_continue)) }
             }
