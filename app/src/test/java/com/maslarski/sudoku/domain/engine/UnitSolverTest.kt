@@ -2,6 +2,7 @@ package com.maslarski.sudoku.domain.engine
 
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Topology
+import com.maslarski.sudoku.domain.model.Variant
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -55,5 +56,28 @@ class UnitSolverTest {
         assertEquals(0, solver.candidates(IntArray(81), 3) and (1 shl 4))
         val invalid = IntArray(81).also { it[3] = 5 }
         assertEquals(0, solver.countSolutions(invalid).count)
+    }
+
+    @Test
+    fun `candidates remain local when another unit has duplicate entries`() {
+        val topology = Topology.forVariant(Variant.SAMURAI, GridSize.NINE)
+        val grid = IntArray(topology.cellCount).also {
+            it[0] = 5
+            it[1] = 5
+            it[20 * topology.width + 12] = 2
+            it[12 * topology.width + 20] = 3
+            it[18 * topology.width + 18] = 4
+        }
+        val solver = UnitSolver(topology)
+        val unaffectedIndex = 20 * topology.width + 20
+        val candidates = solver.candidates(grid, unaffectedIndex)
+        val fullMask = (1 shl 9) - 1
+        val excludedPeers = (1 shl (2 - 1)) or (1 shl (3 - 1)) or (1 shl (4 - 1))
+
+        assertEquals(fullMask and excludedPeers.inv(), candidates)
+
+        val conflictPeerCandidates = solver.candidates(grid, 2)
+        assertTrue(conflictPeerCandidates != 0)
+        assertEquals(0, conflictPeerCandidates and (1 shl (5 - 1)))
     }
 }

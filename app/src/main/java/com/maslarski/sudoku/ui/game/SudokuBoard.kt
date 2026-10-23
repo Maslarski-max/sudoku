@@ -37,6 +37,7 @@ import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.domain.model.Topology
 import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.ui.theme.LocalBoardColors
+import kotlin.math.floor
 import kotlin.math.max
 
 /** Zoom/pan state for the board. Exposed so the screen can offer a "reset zoom" action. */
@@ -175,8 +176,8 @@ fun SudokuBoard(
                     val local = (tap - transform.offset) / transform.scale
                     val cell = size.width.toFloat() / (n + outsideMargin)
                     val margin = if (outsideMargin > 0) cell else 0f
-                    val col = ((local.x - margin) / cell).toInt()
-                    val row = ((local.y - margin) / cell).toInt()
+                    val col = floor((local.x - margin) / cell).toInt()
+                    val row = floor((local.y - margin) / cell).toInt()
                     if (row in 0 until topology.height && col in 0 until topology.width) {
                         val index = row * topology.width + col
                         if (topology.active[index]) onCellTap(index)

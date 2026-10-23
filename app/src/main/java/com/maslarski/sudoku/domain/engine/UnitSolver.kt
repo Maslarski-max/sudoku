@@ -49,8 +49,12 @@ class UnitSolver(
     fun candidates(grid: IntArray, index: Int): Int {
         require(grid.size == topology.cellCount)
         if (!topology.active[index] || grid[index] != 0) return 0
-        val state = buildState(grid.copyOf()) ?: return 0
-        return state.candidatesAt(index)
+        var usedMask = extraMasks?.get(index) ?: 0
+        topology.peers(index).forEach { peer ->
+            val value = grid[peer]
+            if (value in 1..9) usedMask = usedMask or (1 shl (value - 1))
+        }
+        return fullMask and usedMask.inv()
     }
 
     fun isConsistent(grid: IntArray): Boolean = buildState(grid.copyOf()) != null
