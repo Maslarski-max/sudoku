@@ -32,7 +32,7 @@
     <string name="home_no_saved_games">No games in progress</string>
     <string name="home_replace_saved_title">Replace saved game?</string>
     <string name="home_replace_saved_message">You already have a %1$d×%1$d game in progress. Starting a new one will discard it and cost 1 Life.</string>
-    <string name="home_replace_variant_message">You already have a %1$s game in progress. Starting a new one will discard it and cost 1 Life.</string>
+    <string name="home_replace_variant_message">Your %1$s game is still in progress. Starting a new one will discard it and cost 1 Life.</string>
     <string name="home_replace_saved_confirm">Start new</string>
     <string name="home_replace_blocked_title">Not enough lives</string>
     <string name="home_replace_blocked_message">Replacing a game in progress costs 1 Life, and you have none left. Your saved game has been kept.</string>
@@ -66,7 +66,7 @@
     <string name="game_notes">Notes</string>
     <string name="game_notes_on">Notes on</string>
     <string name="game_candidates">Candidates</string>
-    <string name="candidates_upsell_title">Unlock Candidates &amp; Notes!</string>
+    <string name="candidates_upsell_title">Unlock Candidates!</string>
     <string name="candidates_upsell_body" formatted="false">Upgrade to the Unlimited Version to reveal grid candidates instantly, get infinite hints, unlimited lives, and 100% ad-free gameplay forever.</string>
     <string name="candidates_upsell_upgrade">Upgrade</string>
     <string name="candidates_upsell_not_now">Not now</string>

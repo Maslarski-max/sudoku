@@ -30,6 +30,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
@@ -536,6 +537,19 @@ class GameViewModelTest {
     }
 
     @Test
+    fun `candidates toggle is ignored while lives are loading`() = vmTest {
+        lives.deferInitialEmission = true
+        val vm = viewModel()
+        dispatcher.scheduler.runCurrent()
+
+        vm.toggleCandidates()
+
+        assertFalse(vm.uiState.value.showCandidatesUpsell)
+        assertFalse(vm.uiState.value.showCandidates)
+        assertEquals(0, settings.candidateWrites)
+    }
+
+    @Test
     fun `premium candidates toggle persists and enables display`() = vmTest {
         lives.state.value = lives.state.value.copy(unlimited = true)
         val vm = viewModel()
@@ -711,8 +725,10 @@ private class FakeGameRepository : GameRepository {
 
 private class FakeLivesRepository : LivesRepository {
     val state = MutableStateFlow(Lives(count = Lives.STARTING_LIVES, unlimited = false))
+    var deferInitialEmission = false
+    private val delayedLives = MutableSharedFlow<Lives>(extraBufferCapacity = 1)
     var consumed = 0
-    override val lives: Flow<Lives> get() = state
+    override val lives: Flow<Lives> get() = if (deferInitialEmission) delayedLives else state
     override suspend fun consumeLife(): Boolean {
         val current = state.value
         if (current.unlimited) return true

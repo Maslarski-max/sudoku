@@ -346,7 +346,8 @@ class GameViewModel @Inject constructor(
     fun toggleNotesMode() = local.update { it.copy(notesMode = !it.notesMode) }
 
     fun toggleCandidates() {
-        if (local.value.lives?.unlimited != true) {
+        val lives = local.value.lives ?: return
+        if (!lives.unlimited) {
             local.update { it.copy(showCandidatesUpsell = true) }
             return
         }
