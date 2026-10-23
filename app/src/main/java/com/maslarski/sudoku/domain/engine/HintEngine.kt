@@ -31,6 +31,44 @@ class HintEngine {
         return Hint.Reveal(target, solution[target])
     }
 
+    fun hintFor(state: GameState, index: Int): Hint? {
+        val grid = state.valuesArray()
+        val solution = state.puzzle.solution
+        if (grid[index] == solution[index] && state.cells[index].isGiven.not()) return null
+        if (state.cells[index].isGiven) return null
+        if (grid[index] != 0) return Hint.FixMistake(index, solution[index], grid[index])
+        if (grid.indices.any { grid[it] != 0 && grid[it] != solution[it] }) {
+            return Hint.Reveal(index, solution[index])
+        }
+
+        val gridSize = state.gridSize
+        val solver = SudokuSolver(gridSize)
+        val candidates = IntArray(grid.size) { solver.candidates(grid, it) }
+        val mask = candidates[index]
+        if (Integer.bitCount(mask) == 1) {
+            val value = Integer.numberOfTrailingZeros(mask) + 1
+            if (value == solution[index]) {
+                return Hint.NakedSingle(index, value, peersOf(index, gridSize).filter { grid[it] != 0 })
+            }
+        }
+
+        val n = gridSize.size
+        val row = (index / n) * n
+        val col = index % n
+        val box = gridSize.boxIndex(index / n, index % n)
+        val units = listOf(
+            (row until row + n).toList() to Hint.HiddenSingle.Unit.ROW,
+            (0 until n).map { it * n + col } to Hint.HiddenSingle.Unit.COLUMN,
+            boxCells(box, gridSize) to Hint.HiddenSingle.Unit.BOX,
+        )
+        for ((cells, unit) in units) {
+            singleInUnit(cells, grid, candidates, unit, solution[index])
+                ?.takeIf { it.index == index && it.value == solution[index] }
+                ?.let { return it }
+        }
+        return Hint.Reveal(index, solution[index])
+    }
+
     private fun nakedSingle(grid: IntArray, candidates: IntArray, gridSize: GridSize): Hint? {
         for (i in grid.indices) {
             if (grid[i] != 0) continue
@@ -55,9 +93,15 @@ class HintEngine {
         return null
     }
 
-    private fun singleInUnit(cells: List<Int>, grid: IntArray, candidates: IntArray, unit: Hint.HiddenSingle.Unit): Hint? {
+    private fun singleInUnit(
+        cells: List<Int>,
+        grid: IntArray,
+        candidates: IntArray,
+        unit: Hint.HiddenSingle.Unit,
+        onlyValue: Int? = null,
+    ): Hint? {
         val n = cells.size
-        for (value in 1..n) {
+        for (value in onlyValue?.let(::listOf) ?: (1..n).toList()) {
             val bit = 1 shl (value - 1)
             if (cells.any { grid[it] == value }) continue
             val spots = cells.filter { grid[it] == 0 && candidates[it] and bit != 0 }

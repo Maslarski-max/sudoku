@@ -33,7 +33,12 @@ class FakeBillingRepository @Inject constructor(
     override val products: StateFlow<List<StoreProduct>> = MutableStateFlow(
         listOf(
             StoreProduct(ProductId.FIVE_LIVES, "5 Lives", "Adds five lives instantly.", "$0.99"),
-            StoreProduct(ProductId.UNLIMITED_LIVES, "Unlimited Lives", "Removes the lives system forever.", "$4.99"),
+            StoreProduct(
+                ProductId.UNLIMITED_LIVES,
+                "Unlimited Lives",
+                "Removes the lives system forever and unlocks 3 premium themes: Cyberpunk Neon, Retro Arcade and Zen Forest. One-time purchase.",
+                "$4.99",
+            ),
         ),
     )
 

@@ -12,12 +12,14 @@ import com.maslarski.sudoku.ui.game.GameScreen
 import com.maslarski.sudoku.ui.home.HomeScreen
 import com.maslarski.sudoku.ui.leaderboard.LeaderboardScreen
 import com.maslarski.sudoku.ui.store.StoreScreen
+import com.maslarski.sudoku.ui.settings.SettingsScreen
 
 object Routes {
     const val HOME = "home"
     const val GAME = "game/{gridSize}"
     const val LEADERBOARD = "leaderboard?gridSize={gridSize}&difficulty={difficulty}"
     const val STORE = "store"
+    const val SETTINGS = "settings"
 
     fun game(gridSize: GridSize) = "game/${gridSize.size}"
     fun leaderboard(gridSize: GridSize? = null, difficulty: Difficulty? = null) =
@@ -33,6 +35,7 @@ fun SudokuNavHost() {
                 onOpenGame = { gridSize -> navController.navigate(Routes.game(gridSize)) },
                 onOpenLeaderboard = { navController.navigate(Routes.leaderboard()) },
                 onOpenStore = { navController.navigate(Routes.STORE) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
         }
         composable(
@@ -57,6 +60,12 @@ fun SudokuNavHost() {
         }
         composable(Routes.STORE) {
             StoreScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenStore = { navController.navigate(Routes.STORE) },
+            )
         }
     }
 }

@@ -13,21 +13,29 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.maslarski.sudoku.BuildConfig
 import com.maslarski.sudoku.data.billing.FakeBillingRepository
 import com.maslarski.sudoku.data.billing.PlayBillingRepository
+import com.maslarski.sudoku.data.feedback.DeviceGameFeedback
 import com.maslarski.sudoku.data.local.LeaderboardDao
 import com.maslarski.sudoku.data.local.SavedGameDao
 import com.maslarski.sudoku.data.local.SudokuDatabase
 import com.maslarski.sudoku.data.repository.DataStoreLivesRepository
+import com.maslarski.sudoku.data.repository.DataStoreReviewPromptRepository
+import com.maslarski.sudoku.data.repository.DataStoreSettingsRepository
 import com.maslarski.sudoku.data.repository.FirebaseAuthRepository
 import com.maslarski.sudoku.data.repository.FirestoreLeaderboardRepository
 import com.maslarski.sudoku.data.repository.RoomGameRepository
+import com.maslarski.sudoku.data.time.SystemEpochClock
 import com.maslarski.sudoku.domain.engine.GameEngine
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.repository.AuthRepository
 import com.maslarski.sudoku.domain.repository.BillingRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
+import com.maslarski.sudoku.domain.repository.GameFeedback
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
+import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
+import com.maslarski.sudoku.domain.repository.SettingsRepository
+import com.maslarski.sudoku.domain.time.EpochClock
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -51,6 +59,10 @@ object AppModule {
 
     @Provides
     fun provideDefaultDispatcher(): CoroutineDispatcher = Dispatchers.Default
+
+    @Provides
+    @Singleton
+    fun provideEpochClock(): EpochClock = SystemEpochClock
 
     @Provides
     @Singleton
@@ -113,6 +125,9 @@ object AppModule {
 abstract class RepositoryModule {
     @Binds abstract fun bindGameRepository(impl: RoomGameRepository): GameRepository
     @Binds abstract fun bindLivesRepository(impl: DataStoreLivesRepository): LivesRepository
+    @Binds abstract fun bindReviewPromptRepository(impl: DataStoreReviewPromptRepository): ReviewPromptRepository
+    @Binds abstract fun bindSettingsRepository(impl: DataStoreSettingsRepository): SettingsRepository
+    @Binds abstract fun bindGameFeedback(impl: DeviceGameFeedback): GameFeedback
     @Binds abstract fun bindAuthRepository(impl: FirebaseAuthRepository): AuthRepository
     @Binds abstract fun bindLeaderboardRepository(impl: FirestoreLeaderboardRepository): LeaderboardRepository
 }

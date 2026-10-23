@@ -1,10 +1,12 @@
 package com.maslarski.sudoku.domain.engine
 
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -70,12 +72,16 @@ class ScoringRulesTest {
                 val i = firstEmpty(s)
                 s = engine.enterValue(s, i, s.puzzle.solution[i]).state
             }
-            // Instant completion: full time bonus (= base × empties) on top of base points.
+            // Instant completion: combo and full time bonuses are added before the multiplier.
             val fast = ScoringRules.breakdown(s.copy(elapsedMillis = 0L))
             assertEquals(empties * 10, fast.basePoints)
+            assertEquals((empties - GameRules.COMBO_MIN_STREAK + 1) * 10, fast.comboBonus)
             assertEquals(empties * 10, fast.timeBonus)
             assertEquals(ScoringRules.multiplier(difficulty), fast.multiplier, 0.0)
-            assertEquals(Math.round(empties * 20 * ScoringRules.multiplier(difficulty)).toInt(), fast.total)
+            assertEquals(
+                Math.round((empties * 20 + fast.comboBonus) * ScoringRules.multiplier(difficulty)).toInt(),
+                fast.total,
+            )
 
             // Over the target time: no bonus.
             val slow = ScoringRules.breakdown(s.copy(elapsedMillis = ScoringRules.targetTimeMillis(s) + 1))
@@ -92,5 +98,82 @@ class ScoringRulesTest {
         val s = newGame()
         assertEquals(0, ScoringRules.breakdown(s).timeBonus)
         assertTrue(hints.nextHint(s) !is Hint.None)
+    }
+
+    @Test
+    fun `combo cells add base points before difficulty multiplier and erase removes bonus`() {
+        val start = newGame(difficulty = Difficulty.MEDIUM)
+        val indices = start.cells.indices.filter { start.cells[it].isEmpty }.take(4)
+        var game = start
+        indices.forEachIndexed { position, index ->
+            game = game.copy(elapsedMillis = position * 1_000L)
+            game = engine.enterValue(game, index, game.puzzle.solution[index]).state
+        }
+
+        val score = ScoringRules.breakdown(game)
+        val base = ScoringRules.basePoints(game.gridSize)
+        assertEquals(2 * base, score.comboBonus)
+        assertEquals(
+            ((score.basePoints + score.comboBonus) * score.multiplier).toInt(),
+            score.total,
+        )
+
+        val erased = engine.erase(game, indices[3])
+        val erasedScore = ScoringRules.breakdown(erased)
+        assertFalse(erased.cells[indices[3]].combo)
+        assertEquals(base, erasedScore.comboBonus)
+        assertEquals(
+            ((erasedScore.basePoints + erasedScore.comboBonus) * erasedScore.multiplier).toInt(),
+            erasedScore.total,
+        )
+    }
+
+    @Test
+    fun `wrong overwrite then correcting counted combo cell does not restore bonus`() {
+        val start = newGame()
+        val indices = start.cells.indices.filter { start.cells[it].isEmpty }.take(3)
+        var game = start
+        indices.forEachIndexed { position, index ->
+            game = game.copy(elapsedMillis = position * 1_000L)
+            game = engine.enterValue(game, index, game.puzzle.solution[index]).state
+        }
+        val comboIndex = indices.last()
+        assertTrue(game.cells[comboIndex].combo)
+
+        val wrong = (1..9).first { it != game.puzzle.solution[comboIndex] }
+        val overwritten = engine.enterValue(game, comboIndex, wrong).state
+        assertFalse(overwritten.cells[comboIndex].combo)
+        assertEquals(0, ScoringRules.breakdown(overwritten).comboBonus)
+
+        val corrected = engine.enterValue(
+            overwritten,
+            comboIndex,
+            game.puzzle.solution[comboIndex],
+        ).state
+        assertFalse(corrected.cells[comboIndex].combo)
+        assertEquals(0, ScoringRules.breakdown(corrected).comboBonus)
+    }
+
+    @Test
+    fun `undoing and redoing combo erase restores and removes its bonus`() {
+        val start = newGame()
+        val indices = start.cells.indices.filter { start.cells[it].isEmpty }.take(3)
+        var game = start
+        indices.forEachIndexed { position, index ->
+            game = game.copy(elapsedMillis = position * 1_000L)
+            game = engine.enterValue(game, index, game.puzzle.solution[index]).state
+        }
+        val comboIndex = indices.last()
+        val base = ScoringRules.basePoints(game.gridSize)
+        assertEquals(base, ScoringRules.breakdown(game).comboBonus)
+
+        val erased = engine.erase(game, comboIndex)
+        assertEquals(0, ScoringRules.breakdown(erased).comboBonus)
+        val undone = engine.undo(erased)
+        assertTrue(undone.cells[comboIndex].combo)
+        assertEquals(base, ScoringRules.breakdown(undone).comboBonus)
+        val redone = engine.redo(undone)
+        assertFalse(redone.cells[comboIndex].combo)
+        assertEquals(0, ScoringRules.breakdown(redone).comboBonus)
     }
 }

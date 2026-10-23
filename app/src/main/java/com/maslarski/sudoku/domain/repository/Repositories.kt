@@ -2,6 +2,8 @@ package com.maslarski.sudoku.domain.repository
 
 import com.maslarski.sudoku.domain.model.BillingAvailability
 import com.maslarski.sudoku.domain.model.BillingEvent
+import com.maslarski.sudoku.domain.model.AppSettings
+import com.maslarski.sudoku.domain.model.AppTheme
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
@@ -35,6 +37,28 @@ interface LivesRepository {
     suspend fun consumeLife(): Boolean
     suspend fun addLives(count: Int)
     suspend fun setUnlimited(unlimited: Boolean)
+}
+
+interface ReviewPromptRepository {
+    suspend fun onPuzzleCompleted(): Boolean
+    suspend fun rateNow()
+    suspend fun later()
+    suspend fun never()
+}
+
+interface SettingsRepository {
+    val settings: Flow<AppSettings>
+    suspend fun setSoundEnabled(enabled: Boolean)
+    suspend fun setVibrationEnabled(enabled: Boolean)
+    suspend fun setShowCandidates(enabled: Boolean)
+    suspend fun setTheme(theme: AppTheme)
+    suspend fun setDarkMode(darkMode: Boolean)
+}
+
+interface GameFeedback {
+    fun cellSelected()
+    fun mistake()
+    fun puzzleCompleted()
 }
 
 interface AuthRepository {

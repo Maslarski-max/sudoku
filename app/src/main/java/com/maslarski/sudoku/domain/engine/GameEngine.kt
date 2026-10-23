@@ -26,9 +26,38 @@ class GameEngine {
         val correct = state.puzzle.solution[index] == value
         val streak = if (correct) state.mistakeStreak else state.mistakeStreak + 1
         val lostLife = !correct && streak >= GameRules.MISTAKES_PER_LIFE
-        val after = cell.copy(value = value, notes = 0, isError = !correct)
+        val newlyCountedCorrect = correct && index !in state.countedCells
+        val comboStreak = when {
+            !correct -> 0
+            !newlyCountedCorrect -> state.comboStreak
+            state.lastCorrectElapsedMillis != null &&
+                state.elapsedMillis - state.lastCorrectElapsedMillis <= GameRules.COMBO_WINDOW_MILLIS ->
+                state.comboStreak + 1
+            else -> 1
+        }
+        val after = cell.copy(
+            value = value,
+            notes = 0,
+            isError = !correct,
+            combo = newlyCountedCorrect && comboStreak >= GameRules.COMBO_MIN_STREAK,
+        )
         val next = applyMove(state, Move(index, cell, after, costLife = lostLife))
-            .let { if (!correct) it.copy(mistakes = it.mistakes + 1, mistakeStreak = if (lostLife) 0 else streak) else it }
+            .let {
+                when {
+                    !correct -> it.copy(
+                        mistakes = it.mistakes + 1,
+                        mistakeStreak = if (lostLife) 0 else streak,
+                        comboStreak = 0,
+                        lastCorrectElapsedMillis = null,
+                    )
+                    newlyCountedCorrect -> it.copy(
+                        comboStreak = comboStreak,
+                        lastCorrectElapsedMillis = state.elapsedMillis,
+                        countedCells = state.countedCells + index,
+                    )
+                    else -> it
+                }
+            }
             .let { clearPeerNotes(it, index, value) }
         return EntryResult(finalizeIfSolved(next), wasMistake = !correct, lostLife = lostLife)
     }
@@ -36,7 +65,7 @@ class GameEngine {
     fun toggleNote(state: GameState, index: Int, value: Int): GameState {
         val cell = state.cells[index]
         if (cell.isGiven || state.isComplete) return state
-        val base = if (cell.value != 0) cell.copy(value = 0, isError = false) else cell
+        val base = if (cell.value != 0) cell.copy(value = 0, isError = false, combo = false) else cell
         return applyMove(state, Move(index, cell, base.toggleNote(value)))
     }
 
@@ -72,10 +101,15 @@ class GameEngine {
     fun applyHint(state: GameState, hint: Hint): GameState {
         if (hint is Hint.None || state.isComplete) return state
         val cell = state.cells[hint.index]
-        val after = cell.copy(value = hint.value, notes = 0, isError = false)
+        val after = cell.copy(value = hint.value, notes = 0, isError = false, combo = false)
         val next = applyMove(state, Move(hint.index, cell, after))
             .let { clearPeerNotes(it, hint.index, hint.value) }
-            .let { it.copy(hintsUsed = it.hintsUsed + 1) }
+            .let {
+                it.copy(
+                    hintsUsed = it.hintsUsed + 1,
+                    countedCells = it.countedCells + hint.index,
+                )
+            }
         return finalizeIfSolved(next)
     }
 
