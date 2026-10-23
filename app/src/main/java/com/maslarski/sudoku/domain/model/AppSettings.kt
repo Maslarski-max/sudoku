@@ -6,4 +6,5 @@ data class AppSettings(
     val showCandidates: Boolean = false,
     val theme: AppTheme = AppTheme.DEFAULT,
     val darkMode: Boolean = true,
+    val iconMode: Boolean = false,
 )

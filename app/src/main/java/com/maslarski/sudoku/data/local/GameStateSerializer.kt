@@ -60,6 +60,7 @@ class GameStateSerializer @Inject constructor() {
         val comboStreak: Int = 0,
         val lastCorrectElapsedMillis: Long? = null,
         val countedCells: List<Int> = emptyList(),
+        val iconMode: Boolean = false,
     ) {
         fun toState(): GameState = GameState(
             puzzle = Puzzle(
@@ -85,6 +86,7 @@ class GameStateSerializer @Inject constructor() {
             comboStreak = comboStreak,
             lastCorrectElapsedMillis = lastCorrectElapsedMillis,
             countedCells = countedCells.toSet(),
+            iconMode = iconMode,
         )
 
         companion object {
@@ -110,6 +112,7 @@ class GameStateSerializer @Inject constructor() {
                 comboStreak = s.comboStreak,
                 lastCorrectElapsedMillis = s.lastCorrectElapsedMillis,
                 countedCells = s.countedCells.sorted(),
+                iconMode = s.iconMode,
             )
         }
     }

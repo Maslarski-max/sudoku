@@ -59,6 +59,17 @@ class DataStoreSettingsRepositoryTest {
     }
 
     @Test
+    fun `icon mode defaults off and persists independently`() = runTest {
+        assertFalse(repo.settings.first().iconMode)
+
+        repo.setIconMode(true)
+        assertTrue(repo.settings.first().iconMode)
+
+        repo.setIconMode(false)
+        assertFalse(repo.settings.first().iconMode)
+    }
+
+    @Test
     fun `theme persists and unknown stored value falls back to default`() = runTest {
         repo.setTheme(AppTheme.CYBERPUNK_NEON)
         assertEquals(AppTheme.CYBERPUNK_NEON, repo.settings.first().theme)

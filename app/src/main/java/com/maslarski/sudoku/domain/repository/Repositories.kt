@@ -30,6 +30,7 @@ data class SavedGameSummary(
     val elapsedMillis: Long,
     val filledFraction: Float,
     val lastPlayedEpochMillis: Long,
+    val iconMode: Boolean = false,
 )
 
 interface LivesRepository {
@@ -53,6 +54,7 @@ interface SettingsRepository {
     suspend fun setShowCandidates(enabled: Boolean)
     suspend fun setTheme(theme: AppTheme)
     suspend fun setDarkMode(darkMode: Boolean)
+    suspend fun setIconMode(iconMode: Boolean)
 }
 
 interface GameFeedback {

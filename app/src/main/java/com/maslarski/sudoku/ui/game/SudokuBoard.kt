@@ -21,12 +21,15 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.model.GameState
@@ -76,6 +79,8 @@ fun SudokuBoard(
     val colors = LocalBoardColors.current
     val textMeasurer = rememberTextMeasurer()
     val n = game.gridSize.size
+    val iconMode = game.iconMode && (n == 9 || n == 12)
+    val iconPainters = if (iconMode) HolidayIcons.take(n).map { rememberVectorPainter(it) } else emptyList()
     // Digits repeat across the board, so each (text, style) is laid out once per cell size instead of
     // once per cell per frame (18x18 = 324 cells plus notes).
     val layoutCache = remember(n, colors) { TextLayoutCache(textMeasurer) }
@@ -124,6 +129,7 @@ fun SudokuBoard(
                         activeHint = activeHint,
                         hintRelated = hintRelated,
                         candidateMasks = candidateMasks,
+                        iconPainters = iconPainters,
                         colors = colors,
                         layouts = layoutCache,
                     )
@@ -141,6 +147,7 @@ private fun DrawScope.drawBoard(
     activeHint: Hint?,
     hintRelated: Set<Int>,
     candidateMasks: IntArray?,
+    iconPainters: List<Painter>,
     colors: com.maslarski.sudoku.ui.theme.BoardColors,
     layouts: TextLayoutCache,
 ) {
@@ -180,6 +187,8 @@ private fun DrawScope.drawBoard(
     val valueStyleEntered = TextStyle(fontSize = valueSize, color = colors.enteredText)
     val valueStyleError = TextStyle(fontSize = valueSize, color = colors.errorText)
     val noteStyle = TextStyle(fontSize = noteSize, color = colors.noteText)
+    val errorBackground = colors.errorText.copy(alpha = 0.25f)
+    val enteredBarHeight = 2.dp.toPx()
 
     for (index in 0 until n * n) {
         val row = index / n
@@ -188,33 +197,70 @@ private fun DrawScope.drawBoard(
         val x = col * cell
         val y = row * cell
         if (c.value != 0) {
-            val style = when {
-                c.isGiven -> valueStyleGiven
-                c.isError -> valueStyleError
-                else -> valueStyleEntered
+            if (iconPainters.isNotEmpty() && c.value <= iconPainters.size) {
+                if (c.isError) {
+                    drawRect(errorBackground, topLeft = Offset(x, y), size = Size(cell, cell))
+                }
+                val iconSize = cell * 0.72f
+                with(iconPainters[c.value - 1]) {
+                    translate(x + (cell - iconSize) / 2f, y + (cell - iconSize) / 2f) {
+                        draw(Size(iconSize, iconSize))
+                    }
+                }
+                if (!c.isGiven) {
+                    drawRect(
+                        color = colors.enteredText,
+                        topLeft = Offset(x, y + cell - enteredBarHeight),
+                        size = Size(cell, enteredBarHeight),
+                    )
+                }
+            } else {
+                val style = when {
+                    c.isGiven -> valueStyleGiven
+                    c.isError -> valueStyleError
+                    else -> valueStyleEntered
+                }
+                val layout = layouts.get(c.value, style)
+                drawText(
+                    layout,
+                    topLeft = Offset(x + (cell - layout.size.width) / 2f, y + (cell - layout.size.height) / 2f),
+                )
             }
-            val layout = layouts.get(c.value, style)
-            drawText(
-                layout,
-                topLeft = Offset(x + (cell - layout.size.width) / 2f, y + (cell - layout.size.height) / 2f),
-            )
         } else if ((candidateMasks?.getOrNull(index) ?: c.notes) != 0) {
             val notes = candidateMasks?.getOrNull(index) ?: c.notes
             val subW = cell / noteCols
             val subH = cell / noteRows
-            for (v in 1..n) {
-                if (notes and (1 shl (v - 1)) == 0) continue
-                val k = v - 1
-                val nc = k % noteCols
-                val nr = k / noteCols
-                val layout = layouts.get(v, noteStyle)
-                drawText(
-                    layout,
-                    topLeft = Offset(
-                        x + nc * subW + (subW - layout.size.width) / 2f,
-                        y + nr * subH + (subH - layout.size.height) / 2f,
-                    ),
-                )
+            if (iconPainters.isNotEmpty()) {
+                val iconSize = minOf(subW, subH) * 0.72f
+                for (v in 1..n) {
+                    if (notes and (1 shl (v - 1)) == 0 || v > iconPainters.size) continue
+                    val k = v - 1
+                    val nc = k % noteCols
+                    val nr = k / noteCols
+                    with(iconPainters[v - 1]) {
+                        translate(
+                            x + nc * subW + (subW - iconSize) / 2f,
+                            y + nr * subH + (subH - iconSize) / 2f,
+                        ) {
+                            draw(Size(iconSize, iconSize))
+                        }
+                    }
+                }
+            } else {
+                for (v in 1..n) {
+                    if (notes and (1 shl (v - 1)) == 0) continue
+                    val k = v - 1
+                    val nc = k % noteCols
+                    val nr = k / noteCols
+                    val layout = layouts.get(v, noteStyle)
+                    drawText(
+                        layout,
+                        topLeft = Offset(
+                            x + nc * subW + (subW - layout.size.width) / 2f,
+                            y + nr * subH + (subH - layout.size.height) / 2f,
+                        ),
+                    )
+                }
             }
         }
     }

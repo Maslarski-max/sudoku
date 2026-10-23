@@ -64,6 +64,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -196,6 +197,7 @@ fun GameScreen(
 
             NumberPad(
                 gridSize = game.gridSize,
+                iconMode = game.iconMode,
                 enabled = !state.isPaused && !game.isComplete,
                 onNumber = viewModel::enterNumber,
                 modifier = Modifier.weight(1f, fill = false),
@@ -236,6 +238,7 @@ fun GameScreen(
         state.activeHint != null -> HintDialog(
             hint = state.activeHint!!,
             gridSize = game.gridSize,
+            iconMode = game.iconMode,
             onApply = viewModel::applyHint,
             onDismiss = viewModel::dismissHint,
         )
@@ -370,6 +373,7 @@ private fun ActionButton(
 @Composable
 private fun NumberPad(
     gridSize: GridSize,
+    iconMode: Boolean,
     enabled: Boolean,
     onNumber: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -394,25 +398,70 @@ private fun NumberPad(
                 contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.height(44.dp),
             ) {
-                Text(n.toString(), style = MaterialTheme.typography.titleMedium)
+                if (iconMode && n <= HolidayIcons.size) {
+                    Icon(
+                        imageVector = HolidayIcons[n - 1],
+                        contentDescription = stringResource(holidayIconNames[n - 1]),
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(24.dp),
+                    )
+                } else {
+                    Text(n.toString(), style = MaterialTheme.typography.titleMedium)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun HintDialog(hint: Hint, gridSize: GridSize, onApply: () -> Unit, onDismiss: () -> Unit) {
+private fun HintDialog(
+    hint: Hint,
+    gridSize: GridSize,
+    iconMode: Boolean,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val row = hint.index / gridSize.size + 1
     val col = hint.index % gridSize.size + 1
     val text = when (hint) {
-        is Hint.NakedSingle -> stringResource(R.string.hint_naked_single, row, col, hint.value)
-        is Hint.HiddenSingle -> when (hint.unit) {
-            Hint.HiddenSingle.Unit.ROW -> stringResource(R.string.hint_hidden_single_row, row, col, hint.value)
-            Hint.HiddenSingle.Unit.COLUMN -> stringResource(R.string.hint_hidden_single_column, row, col, hint.value)
-            Hint.HiddenSingle.Unit.BOX -> stringResource(R.string.hint_hidden_single_box, row, col, hint.value)
+        is Hint.NakedSingle -> if (iconMode) {
+            stringResource(R.string.hint_naked_single_icon, row, col, holidayName(hint.value))
+        } else {
+            stringResource(R.string.hint_naked_single, row, col, hint.value)
         }
-        is Hint.FixMistake -> stringResource(R.string.hint_fix_mistake, row, col, hint.wrongValue, hint.value)
-        is Hint.Reveal -> stringResource(R.string.hint_reveal, row, col, hint.value)
+        is Hint.HiddenSingle -> when (hint.unit) {
+            Hint.HiddenSingle.Unit.ROW -> if (iconMode) {
+                stringResource(R.string.hint_hidden_single_row_icon, row, col, holidayName(hint.value))
+            } else {
+                stringResource(R.string.hint_hidden_single_row, row, col, hint.value)
+            }
+            Hint.HiddenSingle.Unit.COLUMN -> if (iconMode) {
+                stringResource(R.string.hint_hidden_single_column_icon, row, col, holidayName(hint.value))
+            } else {
+                stringResource(R.string.hint_hidden_single_column, row, col, hint.value)
+            }
+            Hint.HiddenSingle.Unit.BOX -> if (iconMode) {
+                stringResource(R.string.hint_hidden_single_box_icon, row, col, holidayName(hint.value))
+            } else {
+                stringResource(R.string.hint_hidden_single_box, row, col, hint.value)
+            }
+        }
+        is Hint.FixMistake -> if (iconMode) {
+            stringResource(
+                R.string.hint_fix_mistake_icon,
+                row,
+                col,
+                holidayName(hint.wrongValue),
+                holidayName(hint.value),
+            )
+        } else {
+            stringResource(R.string.hint_fix_mistake, row, col, hint.wrongValue, hint.value)
+        }
+        is Hint.Reveal -> if (iconMode) {
+            stringResource(R.string.hint_reveal_icon, row, col, holidayName(hint.value))
+        } else {
+            stringResource(R.string.hint_reveal, row, col, hint.value)
+        }
         Hint.None -> stringResource(R.string.hint_none)
     }
     AlertDialog(
@@ -427,6 +476,10 @@ private fun HintDialog(hint: Hint, gridSize: GridSize, onApply: () -> Unit, onDi
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.game_hint_dismiss)) } },
     )
 }
+
+@Composable
+private fun holidayName(value: Int): String =
+    if (value in 1..holidayIconNames.size) stringResource(holidayIconNames[value - 1]) else value.toString()
 
 @Composable
 private fun OutOfLivesDialog(

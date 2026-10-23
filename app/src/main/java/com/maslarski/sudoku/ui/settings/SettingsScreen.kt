@@ -188,6 +188,7 @@ fun SettingsScreen(
                     Text(stringResource(R.string.settings_rule_enter))
                     Text(stringResource(R.string.settings_rule_notes))
                     Text(stringResource(R.string.settings_rule_candidates))
+                    Text(stringResource(R.string.settings_rule_icon_mode))
                     Text(stringResource(R.string.settings_rule_combo))
                     Text(stringResource(R.string.settings_rule_hint))
                     Text(stringResource(R.string.settings_rule_free_hints))

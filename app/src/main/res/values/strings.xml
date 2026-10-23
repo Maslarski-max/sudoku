@@ -28,6 +28,9 @@
     <string name="home_replace_blocked_message">Replacing a game in progress costs 1 Life, and you have none left. Your saved game has been kept.</string>
     <string name="home_start_failed_title">Couldn\'t start game</string>
     <string name="home_start_failed_message">Something went wrong while saving the new puzzle. Your saved game and lives are unchanged.</string>
+    <string name="home_icon_mode">Holiday icons</string>
+    <string name="home_icon_mode_supporting">Play with festive pictures instead of numbers</string>
+    <string name="home_saved_holiday">Holiday</string>
 
     <string name="grid_size_label">%1$d×%1$d</string>
     <string name="difficulty_easy">Easy</string>
@@ -67,6 +70,12 @@
     <string name="hint_hidden_single_box">%3$d must go in row %1$d, column %2$d: it is the only cell in its box where %3$d still fits.</string>
     <string name="hint_fix_mistake">Row %1$d, column %2$d contains %3$d, which is incorrect. The right value is %4$d.</string>
     <string name="hint_reveal">No simple logical step is available right now. Row %1$d, column %2$d is %3$d.</string>
+    <string name="hint_naked_single_icon">Row %1$d, column %2$d can only be %3$s: every other picture already appears in its row, column, or box.</string>
+    <string name="hint_hidden_single_row_icon">%3$s must go in row %1$d, column %2$d: it is the only cell in row %1$d where %3$s still fits.</string>
+    <string name="hint_hidden_single_column_icon">%3$s must go in row %1$d, column %2$d: it is the only cell in column %2$d where %3$s still fits.</string>
+    <string name="hint_hidden_single_box_icon">%3$s must go in row %1$d, column %2$d: it is the only cell in its box where %3$s still fits.</string>
+    <string name="hint_fix_mistake_icon">Row %1$d, column %2$d contains %3$s, which is incorrect. The right value is %4$s.</string>
+    <string name="hint_reveal_icon">No simple logical step is available right now. Row %1$d, column %2$d is %3$s.</string>
     <string name="hint_none">The puzzle is already complete.</string>
 
     <!-- Lives -->
@@ -159,6 +168,7 @@
     <string name="settings_rule_enter">Select a cell and tap a number to fill it.</string>
     <string name="settings_rule_notes">Use Notes mode to add pencil marks.</string>
     <string name="settings_rule_candidates">Candidates shows every number that still fits in each empty cell.</string>
+    <string name="settings_rule_icon_mode">Holiday icons (9×9 and 12×12): every picture appears once in each row, column and box.</string>
     <string name="settings_rule_combo">Place 3 or more correct numbers within 10 seconds of each other to start a combo: every correct number during a combo scores double.</string>
     <string name="settings_rule_hint">A hint reveals the selected cell, or picks a cell if none is selected.</string>
     <string name="settings_rule_free_hints">You get 3 free hints per game (unlimited with Unlimited Lives).</string>
@@ -170,6 +180,18 @@
     <string name="theme_cyberpunk_neon">Cyberpunk Neon</string>
     <string name="theme_retro_arcade">Retro Arcade</string>
     <string name="theme_zen_forest">Zen Forest</string>
+    <string name="icon_santa">Santa</string>
+    <string name="icon_christmas_tree">Christmas tree</string>
+    <string name="icon_snowflake">Snowflake</string>
+    <string name="icon_gift">Gift</string>
+    <string name="icon_snowman">Snowman</string>
+    <string name="icon_bell">Bell</string>
+    <string name="icon_gingerbread_man">Gingerbread man</string>
+    <string name="icon_candy_cane">Candy cane</string>
+    <string name="icon_holly">Holly</string>
+    <string name="icon_reindeer">Reindeer</string>
+    <string name="icon_winter_hat">Winter hat</string>
+    <string name="icon_star">Star</string>
     <string name="theme_included_with_unlimited">Included with Unlimited Lives</string>
     <string name="privacy_policy_text" formatted="false">Sudoku is 100% ad-free and contains no advertising or analytics SDKs.&#10;&#10;What we collect: to run the global leaderboards the app signs you in with Firebase Anonymous Authentication, which creates a random user ID. When you finish a puzzle, your score (grid size, difficulty, points, time, moves, mistakes, completion date) and an automatically generated display name are stored in Google Cloud Firestore. We do not collect your name, email address, contacts, location or photos.&#10;&#10;Purchases: in-app purchases are processed by Google Play. We never see or store your payment details.&#10;&#10;On your device: game progress, lives, purchases status and settings are stored locally and are removed when you clear the app\'s data or uninstall it.&#10;&#10;Third parties: Google Firebase and Google Play process data under Google\'s privacy policy (https://policies.google.com/privacy), which may include device and network information needed for security and reliability.&#10;&#10;Children: the app does not knowingly collect personal information from children.&#10;&#10;Contact: to ask a question or request deletion of your leaderboard data, use the developer email shown on the app\'s Google Play page.</string>
 

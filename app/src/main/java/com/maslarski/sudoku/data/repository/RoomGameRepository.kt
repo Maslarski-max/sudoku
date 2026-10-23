@@ -27,6 +27,7 @@ class RoomGameRepository @Inject constructor(
                 elapsedMillis = it.elapsedMillis,
                 filledFraction = it.filledFraction,
                 lastPlayedEpochMillis = it.lastPlayedEpochMillis,
+                iconMode = runCatching { serializer.decode(it.stateJson).iconMode }.getOrDefault(false),
             )
         }
     }

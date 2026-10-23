@@ -9,6 +9,7 @@ import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
+import com.maslarski.sudoku.domain.repository.SettingsRepository
 import com.maslarski.sudoku.domain.usecase.StartNewGameUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -30,6 +31,7 @@ data class HomeUiState(
     val difficulty: Difficulty = Difficulty.EASY,
     val savedGames: List<SavedGameSummary> = emptyList(),
     val lives: Lives? = null,
+    val iconMode: Boolean = false,
     val generating: Boolean = false,
     val confirmReplace: Boolean = false,
     /** Set when a replacement was refused because the abort penalty could not be paid. */
@@ -44,17 +46,25 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val gameRepository: GameRepository,
     private val livesRepository: LivesRepository,
+    private val settingsRepository: SettingsRepository,
     private val startNewGame: StartNewGameUseCase,
 ) : ViewModel() {
 
     private val selection = MutableStateFlow(HomeUiState())
+    private val iconModeOverride = MutableStateFlow<Boolean?>(null)
 
     val uiState: StateFlow<HomeUiState> = combine(
         selection,
         gameRepository.observeSavedGames(),
         livesRepository.lives,
-    ) { sel, saved, lives ->
-        sel.copy(savedGames = saved.sortedByDescending { it.lastPlayedEpochMillis }, lives = lives)
+        settingsRepository.settings,
+        iconModeOverride,
+    ) { sel, saved, lives, settings, iconMode ->
+        sel.copy(
+            savedGames = saved.sortedByDescending { it.lastPlayedEpochMillis },
+            lives = lives,
+            iconMode = iconMode ?: settings.iconMode,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     private val _navigateToGame = MutableSharedFlow<GridSize>(extraBufferCapacity = 1)
@@ -62,6 +72,10 @@ class HomeViewModel @Inject constructor(
 
     fun selectGridSize(gridSize: GridSize) = selection.update { it.copy(gridSize = gridSize) }
     fun selectDifficulty(difficulty: Difficulty) = selection.update { it.copy(difficulty = difficulty) }
+    fun setIconMode(enabled: Boolean) {
+        iconModeOverride.value = enabled
+        viewModelScope.launch { settingsRepository.setIconMode(enabled) }
+    }
 
     fun onNewGameClicked() {
         if (uiState.value.savedForSelection != null) {
@@ -106,10 +120,19 @@ class HomeViewModel @Inject constructor(
     ) {
         if (selection.value.generating) return
         val (gridSize, difficulty) = selection.value.let { it.gridSize to it.difficulty }
+        val iconMode = uiState.value.iconMode
         selection.update { it.copy(generating = true) }
         viewModelScope.launch {
             try {
-                if (startNewGame(gridSize, difficulty, beforeSave, onSaveFailed) == null) {
+                if (
+                    startNewGame(
+                        gridSize = gridSize,
+                        difficulty = difficulty,
+                        beforeSave = beforeSave,
+                        onSaveFailed = onSaveFailed,
+                        iconMode = iconMode,
+                    ) == null
+                ) {
                     selection.update { it.copy(replaceBlocked = true) }
                     return@launch
                 }

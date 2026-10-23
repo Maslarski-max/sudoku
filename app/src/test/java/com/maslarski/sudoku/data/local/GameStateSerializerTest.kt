@@ -72,6 +72,15 @@ class GameStateSerializerTest {
     }
 
     @Test
+    fun `icon mode round trips and old snapshots default to false`() {
+        val restored = serializer.decode(serializer.encode(game.copy(iconMode = true)))
+        assertTrue(restored.iconMode)
+
+        val oldSnapshot = serializer.encode(game).replace(",\"iconMode\":false", "")
+        assertFalse(serializer.decode(oldSnapshot).iconMode)
+    }
+
+    @Test
     fun `legacy comboCells property is ignored and missing cell combo defaults false`() {
         val comboIndex = game.cells.indexOfFirst { !it.isGiven }
         val legacyJson = serializer.encode(game)

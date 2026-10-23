@@ -31,9 +31,14 @@ class StartNewGameUseCase @Inject constructor(
         difficulty: Difficulty,
         beforeSave: suspend () -> Boolean = { true },
         onSaveFailed: suspend () -> Unit = {},
+        iconMode: Boolean = false,
     ): GameState? {
         val puzzle = withContext(defaultDispatcher) { generator.generate(gridSize, difficulty) }
-        val state = GameState.fromPuzzle(puzzle, nowEpochMillis = System.currentTimeMillis())
+        val state = GameState.fromPuzzle(
+            puzzle,
+            nowEpochMillis = System.currentTimeMillis(),
+            iconMode = iconMode && (gridSize == GridSize.NINE || gridSize == GridSize.TWELVE),
+        )
         return withContext(NonCancellable) {
             if (!beforeSave()) return@withContext null
             try {

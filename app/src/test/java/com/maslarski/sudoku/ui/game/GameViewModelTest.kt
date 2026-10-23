@@ -682,6 +682,9 @@ private class FakeSettingsRepository : SettingsRepository {
     override suspend fun setDarkMode(darkMode: Boolean) {
         state.value = state.value.copy(darkMode = darkMode)
     }
+    override suspend fun setIconMode(iconMode: Boolean) {
+        state.value = state.value.copy(iconMode = iconMode)
+    }
 }
 
 private class RecordingGameFeedback : GameFeedback {
