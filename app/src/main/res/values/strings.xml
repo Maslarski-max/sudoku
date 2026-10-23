@@ -12,22 +12,35 @@
     <string name="home_title">Sudoku</string>
     <string name="home_subtitle">Pick a grid size and difficulty</string>
     <string name="home_grid_size">Grid size</string>
+    <string name="home_special_variations">Special Variations</string>
+    <string name="variant_samurai">Samurai</string>
+    <string name="variant_samurai_description">Five overlapping 9×9 puzzles</string>
+    <string name="variant_flower">Flower</string>
+    <string name="variant_flower_description">Five overlapping 9×9 grids in a flower</string>
+    <string name="variant_outside">Outside</string>
+    <string name="variant_outside_description">Outside clues rule out digits along each edge</string>
     <string name="home_difficulty">Difficulty</string>
     <string name="home_new_game">New game</string>
     <string name="home_continue">Continue</string>
     <string name="home_continue_description">%1$s · %2$s · %3$s</string>
+    <string name="home_continue_description_variant">%1$s · %2$s · %3$s</string>
     <string name="home_generating">Generating a %1$d×%1$d puzzle…</string>
+    <string name="home_generating_variant">Generating %1$s…</string>
     <string name="home_generating_hint">Large grids can take a few seconds.</string>
     <string name="home_ad_free" formatted="false">100% ad-free</string>
     <string name="home_saved_games">Saved games</string>
     <string name="home_no_saved_games">No games in progress</string>
     <string name="home_replace_saved_title">Replace saved game?</string>
     <string name="home_replace_saved_message">You already have a %1$d×%1$d game in progress. Starting a new one will discard it and cost 1 Life.</string>
+    <string name="home_replace_variant_message">You already have a %1$s game in progress. Starting a new one will discard it and cost 1 Life.</string>
     <string name="home_replace_saved_confirm">Start new</string>
     <string name="home_replace_blocked_title">Not enough lives</string>
     <string name="home_replace_blocked_message">Replacing a game in progress costs 1 Life, and you have none left. Your saved game has been kept.</string>
     <string name="home_start_failed_title">Couldn\'t start game</string>
     <string name="home_start_failed_message">Something went wrong while saving the new puzzle. Your saved game and lives are unchanged.</string>
+    <string name="home_icon_mode">Holiday icons</string>
+    <string name="home_icon_mode_supporting">Play with festive pictures instead of numbers</string>
+    <string name="home_saved_holiday">Holiday</string>
 
     <string name="grid_size_label">%1$d×%1$d</string>
     <string name="difficulty_easy">Easy</string>
@@ -36,6 +49,7 @@
 
     <!-- Game -->
     <string name="game_title">%1$d×%1$d · %2$s</string>
+    <string name="game_title_variant">%1$s · %2$s</string>
     <string name="game_mistakes">Mistakes: %1$d</string>
     <string name="game_moves">Moves: %1$d</string>
     <string name="game_score">Score: %1$d</string>
@@ -52,6 +66,10 @@
     <string name="game_notes">Notes</string>
     <string name="game_notes_on">Notes on</string>
     <string name="game_candidates">Candidates</string>
+    <string name="candidates_upsell_title">Unlock Candidates &amp; Notes!</string>
+    <string name="candidates_upsell_body" formatted="false">Upgrade to the Unlimited Version to reveal grid candidates instantly, get infinite hints, unlimited lives, and 100% ad-free gameplay forever.</string>
+    <string name="candidates_upsell_upgrade">Upgrade</string>
+    <string name="candidates_upsell_not_now">Not now</string>
     <string name="game_hint">Hint</string>
     <string name="game_hint_remaining">Hint (%1$d)</string>
     <string name="game_hint_title">Hint</string>
@@ -67,6 +85,12 @@
     <string name="hint_hidden_single_box">%3$d must go in row %1$d, column %2$d: it is the only cell in its box where %3$d still fits.</string>
     <string name="hint_fix_mistake">Row %1$d, column %2$d contains %3$d, which is incorrect. The right value is %4$d.</string>
     <string name="hint_reveal">No simple logical step is available right now. Row %1$d, column %2$d is %3$d.</string>
+    <string name="hint_naked_single_icon">Row %1$d, column %2$d can only be %3$s: every other picture already appears in its row, column, or box.</string>
+    <string name="hint_hidden_single_row_icon">%3$s must go in row %1$d, column %2$d: it is the only cell in row %1$d where %3$s still fits.</string>
+    <string name="hint_hidden_single_column_icon">%3$s must go in row %1$d, column %2$d: it is the only cell in column %2$d where %3$s still fits.</string>
+    <string name="hint_hidden_single_box_icon">%3$s must go in row %1$d, column %2$d: it is the only cell in its box where %3$s still fits.</string>
+    <string name="hint_fix_mistake_icon">Row %1$d, column %2$d contains %3$s, which is incorrect. The right value is %4$s.</string>
+    <string name="hint_reveal_icon">No simple logical step is available right now. Row %1$d, column %2$d is %3$s.</string>
     <string name="hint_none">The puzzle is already complete.</string>
 
     <!-- Lives -->
@@ -96,6 +120,7 @@
     <string name="complete_score_submitted">Score submitted to the leaderboard.</string>
     <string name="complete_score_pending">Score will be submitted when you are online.</string>
     <string name="complete_score_not_best">Your personal best in this category still stands.</string>
+    <string name="complete_local_only">Variation scores aren\'t sent to the global leaderboard.</string>
     <string name="complete_new_game">New game</string>
     <string name="complete_view_leaderboard">Leaderboard</string>
     <string name="complete_home">Home</string>
@@ -155,10 +180,14 @@
     <string name="settings_close">Close</string>
     <string name="settings_version">Version %1$s</string>
     <string name="settings_rule_standard">Each row, column and box contains every number 1..N exactly once.</string>
+    <string name="settings_rule_samurai">Samurai has five overlapping 9×9 grids. Shared cells must satisfy every overlapping row, column and box.</string>
+    <string name="settings_rule_flower">Flower has five overlapping 9×9 grids. Shared cells must satisfy every overlapping row, column and box.</string>
+    <string name="settings_rule_outside">Outside clues show digits among the first three cells from that edge; those digits do not appear in the remaining six cells.</string>
     <string name="settings_grid_shape">Grid %1$d×%1$d: boxes are %2$d×%3$d.</string>
     <string name="settings_rule_enter">Select a cell and tap a number to fill it.</string>
     <string name="settings_rule_notes">Use Notes mode to add pencil marks.</string>
     <string name="settings_rule_candidates">Candidates shows every number that still fits in each empty cell.</string>
+    <string name="settings_rule_icon_mode">Holiday icons (9×9 and 12×12): every picture appears once in each row, column and box.</string>
     <string name="settings_rule_combo">Place 3 or more correct numbers within 10 seconds of each other to start a combo: every correct number during a combo scores double.</string>
     <string name="settings_rule_hint">A hint reveals the selected cell, or picks a cell if none is selected.</string>
     <string name="settings_rule_free_hints">You get 3 free hints per game (unlimited with Unlimited Lives).</string>
@@ -170,6 +199,18 @@
     <string name="theme_cyberpunk_neon">Cyberpunk Neon</string>
     <string name="theme_retro_arcade">Retro Arcade</string>
     <string name="theme_zen_forest">Zen Forest</string>
+    <string name="icon_santa">Santa</string>
+    <string name="icon_christmas_tree">Christmas tree</string>
+    <string name="icon_snowflake">Snowflake</string>
+    <string name="icon_gift">Gift</string>
+    <string name="icon_snowman">Snowman</string>
+    <string name="icon_bell">Bell</string>
+    <string name="icon_gingerbread_man">Gingerbread man</string>
+    <string name="icon_candy_cane">Candy cane</string>
+    <string name="icon_holly">Holly</string>
+    <string name="icon_reindeer">Reindeer</string>
+    <string name="icon_winter_hat">Winter hat</string>
+    <string name="icon_star">Star</string>
     <string name="theme_included_with_unlimited">Included with Unlimited Lives</string>
     <string name="privacy_policy_text" formatted="false">Sudoku is 100% ad-free and contains no advertising or analytics SDKs.&#10;&#10;What we collect: to run the global leaderboards the app signs you in with Firebase Anonymous Authentication, which creates a random user ID. When you finish a puzzle, your score (grid size, difficulty, points, time, moves, mistakes, completion date) and an automatically generated display name are stored in Google Cloud Firestore. We do not collect your name, email address, contacts, location or photos.&#10;&#10;Purchases: in-app purchases are processed by Google Play. We never see or store your payment details.&#10;&#10;On your device: game progress, lives, purchases status and settings are stored locally and are removed when you clear the app\'s data or uninstall it.&#10;&#10;Third parties: Google Firebase and Google Play process data under Google\'s privacy policy (https://policies.google.com/privacy), which may include device and network information needed for security and reliability.&#10;&#10;Children: the app does not knowingly collect personal information from children.&#10;&#10;Contact: to ask a question or request deletion of your leaderboard data, use the developer email shown on the app\'s Google Play page.</string>
 

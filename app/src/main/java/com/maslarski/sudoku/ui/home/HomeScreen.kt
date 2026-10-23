@@ -1,5 +1,6 @@
 package com.maslarski.sudoku.ui.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,12 +27,15 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -48,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maslarski.sudoku.R
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GridSize
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
 import com.maslarski.sudoku.ui.components.difficultyLabel
 import com.maslarski.sudoku.ui.components.formatDuration
@@ -56,7 +61,7 @@ import com.maslarski.sudoku.ui.components.gridSizeLabel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onOpenGame: (GridSize) -> Unit,
+    onOpenGame: (Int) -> Unit,
     onOpenLeaderboard: () -> Unit,
     onOpenStore: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -100,11 +105,58 @@ fun HomeScreen(
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     GridSize.entries.forEachIndexed { i, g ->
                         SegmentedButton(
-                            selected = state.gridSize == g,
+                            selected = state.variant == null && state.gridSize == g,
                             onClick = { viewModel.selectGridSize(g) },
                             shape = SegmentedButtonDefaults.itemShape(index = i, count = GridSize.entries.size),
                             label = { Text(gridSizeLabel(g)) },
                         )
+                    }
+                }
+            }
+            if (state.variant == null &&
+                (state.gridSize == GridSize.NINE || state.gridSize == GridSize.TWELVE)
+            ) {
+                item {
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.home_icon_mode)) },
+                        supportingContent = { Text(stringResource(R.string.home_icon_mode_supporting)) },
+                        trailingContent = {
+                            Switch(
+                                checked = state.iconMode,
+                                onCheckedChange = viewModel::setIconMode,
+                            )
+                        },
+                        modifier = Modifier.clickable { viewModel.setIconMode(!state.iconMode) },
+                    )
+                }
+            }
+            item {
+                Text(stringResource(R.string.home_special_variations), style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Variant.entries.forEach { variant ->
+                        Card(
+                            onClick = { viewModel.selectVariant(variant) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = state.variant == variant,
+                                    onClick = { viewModel.selectVariant(variant) },
+                                )
+                                Column(Modifier.padding(start = 8.dp)) {
+                                    Text(stringResource(variantName(variant)), style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        stringResource(variantDescription(variant)),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -130,14 +182,18 @@ fun HomeScreen(
                     if (state.generating) {
                         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(12.dp))
-                        Text(stringResource(R.string.home_generating, state.gridSize.size))
+                        Text(
+                            state.variant?.let { variant ->
+                                stringResource(R.string.home_generating_variant, stringResource(variantName(variant)))
+                            } ?: stringResource(R.string.home_generating, state.gridSize.size),
+                        )
                     } else {
                         Icon(Icons.Default.PlayArrow, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(R.string.home_new_game))
                     }
                 }
-                if (state.generating && state.gridSize.size > 9) {
+                if (state.generating && (state.variant != null || state.gridSize.size > 9)) {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         stringResource(R.string.home_generating_hint),
@@ -177,8 +233,8 @@ fun HomeScreen(
                     )
                 }
             } else {
-                items(state.savedGames, key = { it.gridSize.name }) { saved ->
-                    SavedGameCard(saved, onClick = { viewModel.continueGame(saved.gridSize) })
+                items(state.savedGames, key = { it.slotId }) { saved ->
+                    SavedGameCard(saved, onClick = { viewModel.continueGame(saved) })
                 }
             }
         }
@@ -188,7 +244,13 @@ fun HomeScreen(
         AlertDialog(
             onDismissRequest = viewModel::dismissReplace,
             title = { Text(stringResource(R.string.home_replace_saved_title)) },
-            text = { Text(stringResource(R.string.home_replace_saved_message, state.gridSize.size)) },
+            text = {
+                Text(
+                    state.variant?.let { variant ->
+                        stringResource(R.string.home_replace_variant_message, stringResource(variantName(variant)))
+                    } ?: stringResource(R.string.home_replace_saved_message, state.gridSize.size),
+                )
+            },
             confirmButton = {
                 TextButton(onClick = viewModel::confirmReplace) { Text(stringResource(R.string.home_replace_saved_confirm)) }
             },
@@ -233,14 +295,30 @@ private fun SavedGameCard(saved: SavedGameSummary, onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        stringResource(
-                            R.string.home_continue_description,
-                            gridSizeLabel(saved.gridSize),
-                            difficultyLabel(saved.difficulty),
-                            formatDuration(saved.elapsedMillis),
-                        ),
+                        if (saved.variant == null) {
+                            stringResource(
+                                R.string.home_continue_description,
+                                gridSizeLabel(saved.gridSize),
+                                difficultyLabel(saved.difficulty),
+                                formatDuration(saved.elapsedMillis),
+                            )
+                        } else {
+                            stringResource(
+                                R.string.home_continue_description_variant,
+                                stringResource(variantName(saved.variant)),
+                                difficultyLabel(saved.difficulty),
+                                formatDuration(saved.elapsedMillis),
+                            )
+                        },
                         style = MaterialTheme.typography.titleSmall,
                     )
+                    if (saved.iconMode && saved.variant == null) {
+                        Text(
+                            stringResource(R.string.home_saved_holiday),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
                 TextButton(onClick = onClick) { Text(stringResource(R.string.home_continue)) }
             }
@@ -250,4 +328,16 @@ private fun SavedGameCard(saved: SavedGameSummary, onClick: () -> Unit) {
             )
         }
     }
+}
+
+private fun variantName(variant: Variant): Int = when (variant) {
+    Variant.SAMURAI -> R.string.variant_samurai
+    Variant.FLOWER -> R.string.variant_flower
+    Variant.OUTSIDE -> R.string.variant_outside
+}
+
+private fun variantDescription(variant: Variant): Int = when (variant) {
+    Variant.SAMURAI -> R.string.variant_samurai_description
+    Variant.FLOWER -> R.string.variant_flower_description
+    Variant.OUTSIDE -> R.string.variant_outside_description
 }

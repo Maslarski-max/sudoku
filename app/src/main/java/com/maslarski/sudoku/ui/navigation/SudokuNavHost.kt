@@ -21,7 +21,7 @@ object Routes {
     const val STORE = "store"
     const val SETTINGS = "settings"
 
-    fun game(gridSize: GridSize) = "game/${gridSize.size}"
+    fun game(slotId: Int) = "game/$slotId"
     fun leaderboard(gridSize: GridSize? = null, difficulty: Difficulty? = null) =
         "leaderboard?gridSize=${gridSize?.size ?: 9}&difficulty=${difficulty?.name ?: Difficulty.EASY.name}"
 }

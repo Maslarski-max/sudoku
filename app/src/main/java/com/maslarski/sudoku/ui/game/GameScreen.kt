@@ -1,5 +1,6 @@
 package com.maslarski.sudoku.ui.game
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -38,8 +39,10 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -64,6 +67,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -83,10 +87,12 @@ import com.maslarski.sudoku.R
 import com.maslarski.sudoku.domain.engine.ScoreBreakdown
 import com.maslarski.sudoku.domain.engine.ScoringRules
 import com.maslarski.sudoku.domain.engine.SudokuSolver
+import com.maslarski.sudoku.domain.engine.UnitSolver
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.ui.components.difficultyLabel
 import com.maslarski.sudoku.ui.components.formatDuration
 import kotlinx.coroutines.CoroutineScope
@@ -127,7 +133,14 @@ fun GameScreen(
             TopAppBar(
                 title = {
                     if (game != null) {
-                        Text(stringResource(R.string.game_title, game.gridSize.size, difficultyLabel(game.difficulty)))
+                        val title = game.variant?.let { variant ->
+                            stringResource(
+                                R.string.game_title_variant,
+                                stringResource(variantName(variant)),
+                                difficultyLabel(game.difficulty),
+                            )
+                        } ?: stringResource(R.string.game_title, game.gridSize.size, difficultyLabel(game.difficulty))
+                        Text(title)
                     }
                 },
                 navigationIcon = {
@@ -157,14 +170,22 @@ fun GameScreen(
             }
             return@Scaffold
         }
-        val candidateMasks = remember(game.cells, state.showCandidates) {
+        val candidateMasks = remember(game.cells, state.showCandidates, game.variant, game.puzzle.outsideClues) {
             if (!state.showCandidates) {
                 null
             } else {
                 val grid = game.valuesArray()
-                val solver = SudokuSolver(game.gridSize)
-                IntArray(game.cells.size) { index ->
-                    if (game.cells[index].isEmpty) solver.candidates(grid, index) else 0
+                val topology = game.topology
+                if (game.variant == null) {
+                    val solver = SudokuSolver(game.gridSize)
+                    IntArray(game.cells.size) { index ->
+                        if (topology.active[index] && game.cells[index].isEmpty) solver.candidates(grid, index) else 0
+                    }
+                } else {
+                    val solver = UnitSolver(topology, game.puzzle.outsideClues?.exclusionMasks(topology))
+                    IntArray(game.cells.size) { index ->
+                        if (topology.active[index] && game.cells[index].isEmpty) solver.candidates(grid, index) else 0
+                    }
                 }
             }
         }
@@ -196,6 +217,8 @@ fun GameScreen(
 
             NumberPad(
                 gridSize = game.gridSize,
+                variant = game.variant,
+                iconMode = game.iconMode,
                 enabled = !state.isPaused && !game.isComplete,
                 onNumber = viewModel::enterNumber,
                 modifier = Modifier.weight(1f, fill = false),
@@ -235,9 +258,21 @@ fun GameScreen(
         )
         state.activeHint != null -> HintDialog(
             hint = state.activeHint!!,
-            gridSize = game.gridSize,
+            gridWidth = game.topology.width,
+            iconMode = game.iconMode && game.variant == null &&
+                (game.gridSize == GridSize.NINE || game.gridSize == GridSize.TWELVE),
             onApply = viewModel::applyHint,
             onDismiss = viewModel::dismissHint,
+        )
+    }
+
+    if (state.showCandidatesUpsell) {
+        CandidatesUpsellDialog(
+            onUpgrade = {
+                viewModel.dismissCandidatesUpsell()
+                onOpenStore()
+            },
+            onDismiss = viewModel::dismissCandidatesUpsell,
         )
     }
 }
@@ -346,7 +381,17 @@ private fun ActionRow(
             ) {
                 Icon(Icons.Default.GridOn, contentDescription = stringResource(R.string.game_candidates))
             }
-            Text(stringResource(R.string.game_candidates), style = MaterialTheme.typography.labelSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.game_candidates), style = MaterialTheme.typography.labelSmall)
+                if (state.lives?.unlimited != true) {
+                    Icon(
+                        Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -370,10 +415,14 @@ private fun ActionButton(
 @Composable
 private fun NumberPad(
     gridSize: GridSize,
+    variant: Variant?,
+    iconMode: Boolean,
     enabled: Boolean,
     onNumber: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val showIcons = iconMode && variant == null &&
+        (gridSize == GridSize.NINE || gridSize == GridSize.TWELVE)
     val columns = when (gridSize) {
         GridSize.NINE -> 9
         GridSize.TWELVE -> 6
@@ -394,25 +443,70 @@ private fun NumberPad(
                 contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.height(44.dp),
             ) {
-                Text(n.toString(), style = MaterialTheme.typography.titleMedium)
+                if (showIcons && n <= HolidayIcons.size) {
+                    Icon(
+                        imageVector = HolidayIcons[n - 1],
+                        contentDescription = stringResource(holidayIconNames[n - 1]),
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(24.dp),
+                    )
+                } else {
+                    Text(n.toString(), style = MaterialTheme.typography.titleMedium)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun HintDialog(hint: Hint, gridSize: GridSize, onApply: () -> Unit, onDismiss: () -> Unit) {
-    val row = hint.index / gridSize.size + 1
-    val col = hint.index % gridSize.size + 1
+private fun HintDialog(
+    hint: Hint,
+    gridWidth: Int,
+    iconMode: Boolean,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val row = hint.index / gridWidth + 1
+    val col = hint.index % gridWidth + 1
     val text = when (hint) {
-        is Hint.NakedSingle -> stringResource(R.string.hint_naked_single, row, col, hint.value)
-        is Hint.HiddenSingle -> when (hint.unit) {
-            Hint.HiddenSingle.Unit.ROW -> stringResource(R.string.hint_hidden_single_row, row, col, hint.value)
-            Hint.HiddenSingle.Unit.COLUMN -> stringResource(R.string.hint_hidden_single_column, row, col, hint.value)
-            Hint.HiddenSingle.Unit.BOX -> stringResource(R.string.hint_hidden_single_box, row, col, hint.value)
+        is Hint.NakedSingle -> if (iconMode) {
+            stringResource(R.string.hint_naked_single_icon, row, col, holidayName(hint.value))
+        } else {
+            stringResource(R.string.hint_naked_single, row, col, hint.value)
         }
-        is Hint.FixMistake -> stringResource(R.string.hint_fix_mistake, row, col, hint.wrongValue, hint.value)
-        is Hint.Reveal -> stringResource(R.string.hint_reveal, row, col, hint.value)
+        is Hint.HiddenSingle -> when (hint.unit) {
+            Hint.HiddenSingle.Unit.ROW -> if (iconMode) {
+                stringResource(R.string.hint_hidden_single_row_icon, row, col, holidayName(hint.value))
+            } else {
+                stringResource(R.string.hint_hidden_single_row, row, col, hint.value)
+            }
+            Hint.HiddenSingle.Unit.COLUMN -> if (iconMode) {
+                stringResource(R.string.hint_hidden_single_column_icon, row, col, holidayName(hint.value))
+            } else {
+                stringResource(R.string.hint_hidden_single_column, row, col, hint.value)
+            }
+            Hint.HiddenSingle.Unit.BOX -> if (iconMode) {
+                stringResource(R.string.hint_hidden_single_box_icon, row, col, holidayName(hint.value))
+            } else {
+                stringResource(R.string.hint_hidden_single_box, row, col, hint.value)
+            }
+        }
+        is Hint.FixMistake -> if (iconMode) {
+            stringResource(
+                R.string.hint_fix_mistake_icon,
+                row,
+                col,
+                holidayName(hint.wrongValue),
+                holidayName(hint.value),
+            )
+        } else {
+            stringResource(R.string.hint_fix_mistake, row, col, hint.wrongValue, hint.value)
+        }
+        is Hint.Reveal -> if (iconMode) {
+            stringResource(R.string.hint_reveal_icon, row, col, holidayName(hint.value))
+        } else {
+            stringResource(R.string.hint_reveal, row, col, hint.value)
+        }
         Hint.None -> stringResource(R.string.hint_none)
     }
     AlertDialog(
@@ -425,6 +519,33 @@ private fun HintDialog(hint: Hint, gridSize: GridSize, onApply: () -> Unit, onDi
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.game_hint_dismiss)) } },
+    )
+}
+
+@Composable
+private fun holidayName(value: Int): String =
+    if (value in 1..holidayIconNames.size) stringResource(holidayIconNames[value - 1]) else value.toString()
+
+@Composable
+private fun CandidatesUpsellDialog(onUpgrade: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.Star,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp),
+            )
+        },
+        title = { Text(stringResource(R.string.candidates_upsell_title)) },
+        text = { Text(stringResource(R.string.candidates_upsell_body)) },
+        confirmButton = {
+            Button(onClick = onUpgrade) { Text(stringResource(R.string.candidates_upsell_upgrade)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.candidates_upsell_not_now)) }
+        },
     )
 }
 
@@ -519,7 +640,7 @@ private fun CompletionDialog(
                 Spacer(Modifier.height(8.dp))
                 Text(stringResource(R.string.complete_score_total, score.total), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    stringResource(R.string.complete_score_base, score.correctEntries, ScoringRules.basePoints(game.gridSize), score.basePoints),
+                    stringResource(R.string.complete_score_base, score.correctEntries, ScoringRules.basePoints(game), score.basePoints),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 if (score.comboBonus > 0) {
@@ -548,6 +669,7 @@ private fun CompletionDialog(
                     ScoreSubmission.Submitted -> Text(stringResource(R.string.complete_score_submitted))
                     ScoreSubmission.Pending -> Text(stringResource(R.string.complete_score_pending))
                     ScoreSubmission.NotPersonalBest -> Text(stringResource(R.string.complete_score_not_best))
+                    ScoreSubmission.LocalOnly -> Text(stringResource(R.string.complete_local_only))
                     ScoreSubmission.NotSubmitted -> Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                     }
@@ -557,10 +679,19 @@ private fun CompletionDialog(
         confirmButton = { Button(onClick = onNewGame) { Text(stringResource(R.string.complete_new_game)) } },
         dismissButton = {
             Row {
-                OutlinedButton(onClick = onLeaderboard) { Text(stringResource(R.string.complete_view_leaderboard)) }
+                if (game.variant == null) {
+                    OutlinedButton(onClick = onLeaderboard) { Text(stringResource(R.string.complete_view_leaderboard)) }
+                }
                 Spacer(Modifier.width(8.dp))
                 TextButton(onClick = onHome) { Text(stringResource(R.string.complete_home)) }
             }
         },
     )
+}
+
+@StringRes
+private fun variantName(variant: Variant): Int = when (variant) {
+    Variant.SAMURAI -> R.string.variant_samurai
+    Variant.FLOWER -> R.string.variant_flower
+    Variant.OUTSIDE -> R.string.variant_outside
 }

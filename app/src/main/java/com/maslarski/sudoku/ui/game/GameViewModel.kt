@@ -9,7 +9,6 @@ import com.maslarski.sudoku.domain.engine.ScoreBreakdown
 import com.maslarski.sudoku.domain.engine.ScoringRules
 import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
-import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.repository.GameFeedback
@@ -26,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -44,6 +44,7 @@ sealed interface ScoreSubmission {
     data object Pending : ScoreSubmission
     /** Completed, but did not beat the player's existing best in this category. */
     data object NotPersonalBest : ScoreSubmission
+    data object LocalOnly : ScoreSubmission
 }
 
 data class GameUiState(
@@ -59,6 +60,7 @@ data class GameUiState(
     val progressReset: Boolean = false,
     val showReviewPrompt: Boolean = false,
     val showCandidates: Boolean = false,
+    val showCandidatesUpsell: Boolean = false,
 ) {
     val isPaused: Boolean get() = pauseReason != PauseReason.NONE
     val score: ScoreBreakdown? get() = game?.let(ScoringRules::breakdown)
@@ -90,7 +92,7 @@ class GameViewModel @Inject constructor(
     private val clock: EpochClock,
 ) : ViewModel() {
 
-    private val gridSize: GridSize = GridSize.entries.first { it.size == checkNotNull(savedStateHandle.get<Int>("gridSize")) }
+    private val slotId: Int = checkNotNull(savedStateHandle.get<Int>("gridSize"))
 
     private val local = MutableStateFlow(GameUiState())
 
@@ -102,7 +104,7 @@ class GameViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val loaded = gameRepository.load(gridSize)
+            val loaded = gameRepository.loadSlot(slotId)
             if (loaded == null) {
                 local.update { it.copy(missing = true) }
             } else {
@@ -121,7 +123,11 @@ class GameViewModel @Inject constructor(
                 }
                 if (game != loaded) gameRepository.save(game)
                 if (game.isComplete) {
-                    local.update { it.copy(scoreSubmission = ScoreSubmission.Submitted) }
+                    local.update {
+                        it.copy(
+                            scoreSubmission = if (game.variant == null) ScoreSubmission.Submitted else ScoreSubmission.LocalOnly,
+                        )
+                    }
                 } else {
                     startTimer()
                     startOutOfLivesCountdownIfNeeded()
@@ -136,8 +142,10 @@ class GameViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            settingsRepository.settings.collect { settings ->
-                local.update { it.copy(showCandidates = settings.showCandidates) }
+            combine(settingsRepository.settings, livesRepository.lives) { settings, lives ->
+                settings.showCandidates && lives.unlimited
+            }.collect { enabled ->
+                local.update { it.copy(showCandidates = enabled) }
             }
         }
 
@@ -338,10 +346,16 @@ class GameViewModel @Inject constructor(
     fun toggleNotesMode() = local.update { it.copy(notesMode = !it.notesMode) }
 
     fun toggleCandidates() {
+        if (local.value.lives?.unlimited != true) {
+            local.update { it.copy(showCandidatesUpsell = true) }
+            return
+        }
         val enabled = !local.value.showCandidates
         local.update { it.copy(showCandidates = enabled) }
         viewModelScope.launch { settingsRepository.setShowCandidates(enabled) }
     }
+
+    fun dismissCandidatesUpsell() = local.update { it.copy(showCandidatesUpsell = false) }
 
     fun enterNumber(value: Int) {
         val state = local.value
@@ -421,10 +435,14 @@ class GameViewModel @Inject constructor(
             if (runCatching { reviewPrompt.onPuzzleCompleted() }.getOrDefault(false)) {
                 local.update { it.copy(showReviewPrompt = true) }
             }
-            val submission = submitScore(state).fold(
-                onSuccess = { uploaded -> if (uploaded) ScoreSubmission.Submitted else ScoreSubmission.NotPersonalBest },
-                onFailure = { ScoreSubmission.Pending },
-            )
+            val submission = if (state.variant != null) {
+                ScoreSubmission.LocalOnly
+            } else {
+                submitScore(state).fold(
+                    onSuccess = { uploaded -> if (uploaded) ScoreSubmission.Submitted else ScoreSubmission.NotPersonalBest },
+                    onFailure = { ScoreSubmission.Pending },
+                )
+            }
             local.update { it.copy(scoreSubmission = submission) }
         }
     }
@@ -445,7 +463,7 @@ class GameViewModel @Inject constructor(
     /** Removes the finished game so the home screen no longer offers to continue it. */
     fun discardCompletedGame() {
         val game = local.value.game ?: return
-        if (game.isComplete) viewModelScope.launch { gameRepository.delete(game.gridSize) }
+        if (game.isComplete) viewModelScope.launch { gameRepository.deleteSlot(game.slotId) }
     }
 
     override fun onCleared() {

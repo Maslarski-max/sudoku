@@ -6,9 +6,11 @@ import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Lives
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
+import com.maslarski.sudoku.domain.repository.SettingsRepository
 import com.maslarski.sudoku.domain.usecase.StartNewGameUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -28,8 +30,10 @@ import javax.inject.Inject
 data class HomeUiState(
     val gridSize: GridSize = GridSize.NINE,
     val difficulty: Difficulty = Difficulty.EASY,
+    val variant: Variant? = null,
     val savedGames: List<SavedGameSummary> = emptyList(),
     val lives: Lives? = null,
+    val iconMode: Boolean = false,
     val generating: Boolean = false,
     val confirmReplace: Boolean = false,
     /** Set when a replacement was refused because the abort penalty could not be paid. */
@@ -37,31 +41,46 @@ data class HomeUiState(
     /** Set when generating or saving a new game threw; any charge has been refunded. */
     val startFailed: Boolean = false,
 ) {
-    val savedForSelection: SavedGameSummary? get() = savedGames.firstOrNull { it.gridSize == gridSize }
+    val selectedSlotId: Int get() = variant?.slotId ?: gridSize.size
+    val savedForSelection: SavedGameSummary? get() = savedGames.firstOrNull { it.slotId == selectedSlotId }
 }
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val gameRepository: GameRepository,
     private val livesRepository: LivesRepository,
+    private val settingsRepository: SettingsRepository,
     private val startNewGame: StartNewGameUseCase,
 ) : ViewModel() {
 
     private val selection = MutableStateFlow(HomeUiState())
+    private val iconModeOverride = MutableStateFlow<Boolean?>(null)
 
     val uiState: StateFlow<HomeUiState> = combine(
         selection,
         gameRepository.observeSavedGames(),
         livesRepository.lives,
-    ) { sel, saved, lives ->
-        sel.copy(savedGames = saved.sortedByDescending { it.lastPlayedEpochMillis }, lives = lives)
+        settingsRepository.settings,
+        iconModeOverride,
+    ) { sel, saved, lives, settings, iconMode ->
+        sel.copy(
+            savedGames = saved.sortedByDescending { it.lastPlayedEpochMillis },
+            lives = lives,
+            iconMode = iconMode ?: settings.iconMode,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
-    private val _navigateToGame = MutableSharedFlow<GridSize>(extraBufferCapacity = 1)
-    val navigateToGame: SharedFlow<GridSize> = _navigateToGame.asSharedFlow()
+    private val _navigateToGame = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    val navigateToGame: SharedFlow<Int> = _navigateToGame.asSharedFlow()
 
-    fun selectGridSize(gridSize: GridSize) = selection.update { it.copy(gridSize = gridSize) }
+    fun selectGridSize(gridSize: GridSize) = selection.update { it.copy(gridSize = gridSize, variant = null) }
+    fun selectVariant(variant: Variant) =
+        selection.update { it.copy(gridSize = GridSize.NINE, variant = variant) }
     fun selectDifficulty(difficulty: Difficulty) = selection.update { it.copy(difficulty = difficulty) }
+    fun setIconMode(enabled: Boolean) {
+        iconModeOverride.value = enabled
+        viewModelScope.launch { settingsRepository.setIconMode(enabled) }
+    }
 
     fun onNewGameClicked() {
         if (uiState.value.savedForSelection != null) {
@@ -97,7 +116,11 @@ class HomeViewModel @Inject constructor(
     fun dismissStartFailed() = selection.update { it.copy(startFailed = false) }
 
     fun continueGame(gridSize: GridSize) {
-        _navigateToGame.tryEmit(gridSize)
+        _navigateToGame.tryEmit(gridSize.size)
+    }
+
+    fun continueGame(saved: SavedGameSummary) {
+        _navigateToGame.tryEmit(saved.slotId)
     }
 
     private fun startGame(
@@ -105,15 +128,27 @@ class HomeViewModel @Inject constructor(
         onSaveFailed: suspend () -> Unit = {},
     ) {
         if (selection.value.generating) return
-        val (gridSize, difficulty) = selection.value.let { it.gridSize to it.difficulty }
+        val (gridSize, difficulty, variant) = selection.value.let {
+            Triple(it.gridSize, it.difficulty, it.variant)
+        }
+        val iconMode = uiState.value.iconMode
         selection.update { it.copy(generating = true) }
         viewModelScope.launch {
             try {
-                if (startNewGame(gridSize, difficulty, beforeSave, onSaveFailed) == null) {
+                if (
+                    startNewGame(
+                        gridSize = gridSize,
+                        difficulty = difficulty,
+                        beforeSave = beforeSave,
+                        onSaveFailed = onSaveFailed,
+                        variant = variant,
+                        iconMode = iconMode,
+                    ) == null
+                ) {
                     selection.update { it.copy(replaceBlocked = true) }
                     return@launch
                 }
-                _navigateToGame.emit(gridSize)
+                _navigateToGame.emit(variant?.slotId ?: gridSize.size)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

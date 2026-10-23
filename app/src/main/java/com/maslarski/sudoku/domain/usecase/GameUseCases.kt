@@ -7,6 +7,7 @@ import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.LeaderboardCategory
 import com.maslarski.sudoku.domain.model.Score
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.AuthRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
@@ -31,9 +32,19 @@ class StartNewGameUseCase @Inject constructor(
         difficulty: Difficulty,
         beforeSave: suspend () -> Boolean = { true },
         onSaveFailed: suspend () -> Unit = {},
+        variant: Variant? = null,
+        iconMode: Boolean = false,
     ): GameState? {
-        val puzzle = withContext(defaultDispatcher) { generator.generate(gridSize, difficulty) }
-        val state = GameState.fromPuzzle(puzzle, nowEpochMillis = System.currentTimeMillis())
+        val puzzle = withContext(defaultDispatcher) {
+            if (variant == null) generator.generate(gridSize, difficulty)
+            else generator.generateVariant(variant, difficulty)
+        }
+        val state = GameState.fromPuzzle(
+            puzzle,
+            nowEpochMillis = System.currentTimeMillis(),
+            iconMode = iconMode && variant == null &&
+                (gridSize == GridSize.NINE || gridSize == GridSize.TWELVE),
+        )
         return withContext(NonCancellable) {
             if (!beforeSave()) return@withContext null
             try {

@@ -11,6 +11,7 @@ import com.maslarski.sudoku.domain.model.AppSettings
 import com.maslarski.sudoku.domain.model.AppTheme
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.model.LeaderboardCategory
 import com.maslarski.sudoku.domain.model.LeaderboardEntry
 import com.maslarski.sudoku.domain.model.Lives
@@ -85,8 +86,9 @@ class GameViewModelTest {
 
     private fun viewModel(
         submitScore: SubmitScoreUseCase = SubmitScoreUseCase(FakeAuthRepository(), leaderboard),
+        slotId: Int = GridSize.NINE.size,
     ) = GameViewModel(
-        savedStateHandle = SavedStateHandle(mapOf("gridSize" to 9)),
+        savedStateHandle = SavedStateHandle(mapOf("gridSize" to slotId)),
         gameRepository = games,
         livesRepository = lives,
         engine = GameEngine(),
@@ -519,7 +521,7 @@ class GameViewModelTest {
     }
 
     @Test
-    fun `candidates toggle persists the setting and updates ui state`() = vmTest {
+    fun `non-premium candidates toggle opens upsell without persisting`() = vmTest {
         val vm = viewModel()
         settle()
         assertFalse(vm.uiState.value.showCandidates)
@@ -527,8 +529,49 @@ class GameViewModelTest {
         vm.toggleCandidates()
         settle()
 
+        assertFalse(vm.uiState.value.showCandidates)
+        assertTrue(vm.uiState.value.showCandidatesUpsell)
+        assertFalse(settings.state.value.showCandidates)
+        assertEquals(0, settings.candidateWrites)
+    }
+
+    @Test
+    fun `premium candidates toggle persists and enables display`() = vmTest {
+        lives.state.value = lives.state.value.copy(unlimited = true)
+        val vm = viewModel()
+        settle()
+
+        vm.toggleCandidates()
+        settle()
+
         assertTrue(vm.uiState.value.showCandidates)
         assertTrue(settings.state.value.showCandidates)
+        assertFalse(vm.uiState.value.showCandidatesUpsell)
+        assertEquals(1, settings.candidateWrites)
+    }
+
+    @Test
+    fun `saved candidates preference is hidden without premium`() = vmTest {
+        settings.state.value = settings.state.value.copy(showCandidates = true)
+        val vm = viewModel()
+        settle()
+
+        assertFalse(vm.uiState.value.showCandidates)
+        assertFalse(vm.uiState.value.showCandidatesUpsell)
+    }
+
+    @Test
+    fun `dismissing candidates upsell clears the flag`() = vmTest {
+        val vm = viewModel()
+        settle()
+        vm.toggleCandidates()
+        settle()
+
+        assertTrue(vm.uiState.value.showCandidatesUpsell)
+        vm.dismissCandidatesUpsell()
+        settle()
+
+        assertFalse(vm.uiState.value.showCandidatesUpsell)
     }
 
     @Test
@@ -613,6 +656,24 @@ class GameViewModelTest {
         assertEquals(ScoreSubmission.NotPersonalBest, vm.uiState.value.scoreSubmission)
     }
 
+    @Test
+    fun `variation completion remains local and does not submit a leaderboard score`() = vmTest {
+        val index = initial.cells.indexOfFirst { it.isEmpty }
+        val givens = initial.puzzle.solution.copyOf().also { it[index] = 0 }
+        val puzzle = initial.puzzle.copy(givens = givens, variant = Variant.OUTSIDE)
+        games.variantSaved[Variant.OUTSIDE.slotId] = GameState.fromPuzzle(puzzle, nowEpochMillis = 0L)
+        val vm = viewModel(slotId = Variant.OUTSIDE.slotId)
+        settle()
+
+        vm.selectCell(index)
+        vm.enterNumber(puzzle.solution[index])
+        settle()
+
+        assertTrue(vm.uiState.value.game?.isComplete == true)
+        assertEquals(ScoreSubmission.LocalOnly, vm.uiState.value.scoreSubmission)
+        assertTrue(leaderboard.submitted.isEmpty())
+    }
+
     private fun completeBoard(vm: GameViewModel) {
         initial.cells.forEachIndexed { index, cell ->
             if (cell.isEmpty) {
@@ -626,14 +687,26 @@ class GameViewModelTest {
 
 private class FakeGameRepository : GameRepository {
     val saved = mutableMapOf<GridSize, GameState>()
+    val variantSaved = mutableMapOf<Int, GameState>()
     var loadGate: CompletableDeferred<Unit>? = null
     override fun observeSavedGames(): Flow<List<SavedGameSummary>> = flowOf(emptyList())
     override suspend fun load(gridSize: GridSize): GameState? {
         loadGate?.await()
         return saved[gridSize]
     }
-    override suspend fun save(state: GameState) { saved[state.gridSize] = state }
+    override suspend fun loadSlot(slotId: Int): GameState? {
+        loadGate?.await()
+        return if (Variant.fromSlotId(slotId) != null) variantSaved[slotId]
+        else GridSize.entries.firstOrNull { it.size == slotId }?.let { saved[it] }
+    }
+    override suspend fun save(state: GameState) {
+        if (state.variant == null) saved[state.gridSize] = state else variantSaved[state.slotId] = state
+    }
     override suspend fun delete(gridSize: GridSize) { saved.remove(gridSize) }
+    override suspend fun deleteSlot(slotId: Int) {
+        if (Variant.fromSlotId(slotId) != null) variantSaved.remove(slotId)
+        else GridSize.entries.firstOrNull { it.size == slotId }?.let(saved::remove)
+    }
 }
 
 private class FakeLivesRepository : LivesRepository {
@@ -666,6 +739,7 @@ private class FakeReviewPromptRepository(var completedCount: Int = 4) : ReviewPr
 
 private class FakeSettingsRepository : SettingsRepository {
     val state = MutableStateFlow(AppSettings())
+    var candidateWrites = 0
     override val settings: Flow<AppSettings> get() = state
     override suspend fun setSoundEnabled(enabled: Boolean) {
         state.value = state.value.copy(soundEnabled = enabled)
@@ -674,6 +748,7 @@ private class FakeSettingsRepository : SettingsRepository {
         state.value = state.value.copy(vibrationEnabled = enabled)
     }
     override suspend fun setShowCandidates(enabled: Boolean) {
+        candidateWrites++
         state.value = state.value.copy(showCandidates = enabled)
     }
     override suspend fun setTheme(theme: AppTheme) {
@@ -681,6 +756,9 @@ private class FakeSettingsRepository : SettingsRepository {
     }
     override suspend fun setDarkMode(darkMode: Boolean) {
         state.value = state.value.copy(darkMode = darkMode)
+    }
+    override suspend fun setIconMode(iconMode: Boolean) {
+        state.value = state.value.copy(iconMode = iconMode)
     }
 }
 
