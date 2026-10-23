@@ -5,4 +5,5 @@ data class AppSettings(
     val vibrationEnabled: Boolean = true,
     val showCandidates: Boolean = false,
     val theme: AppTheme = AppTheme.DEFAULT,
+    val darkMode: Boolean = true,
 )

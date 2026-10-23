@@ -149,6 +149,8 @@
     <string name="settings_how_to_play">How to Play</string>
     <string name="settings_sound">Sound</string>
     <string name="settings_vibration">Vibration</string>
+    <string name="settings_light_mode">Light mode</string>
+    <string name="settings_neon_dark_mode">Neon themes always use a dark background</string>
     <string name="settings_privacy_policy">Privacy Policy</string>
     <string name="settings_close">Close</string>
     <string name="settings_version">Version %1$s</string>

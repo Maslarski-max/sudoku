@@ -1,31 +1,38 @@
 package com.maslarski.sudoku.ui.theme
 
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import com.maslarski.sudoku.domain.model.AppTheme
 
 private val LightColors = lightColorScheme(
     primary = Color(0xFF1E4FA3),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFD8E2FF),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFD6E3FF),
     onPrimaryContainer = Color(0xFF001A42),
-    secondary = Color(0xFF575E71),
-    secondaryContainer = Color(0xFFDBE2F9),
-    tertiary = Color(0xFF715573),
-    error = Color(0xFFBA1A1A),
-    background = Color(0xFFFEFBFF),
-    surface = Color(0xFFFEFBFF),
-    surfaceVariant = Color(0xFFE1E2EC),
+    secondary = Color(0xFF0D47A1),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFDCE6F7),
+    onSecondaryContainer = Color(0xFF0A2A5E),
+    error = Color(0xFFB00020),
+    background = Color(0xFFF4F4F1),
+    onBackground = Color(0xFF000000),
+    surface = Color(0xFFFAFAF8),
+    onSurface = Color(0xFF000000),
+    surfaceVariant = Color(0xFFE0E0E0),
+    onSurfaceVariant = Color(0xFF424242),
+    surfaceTint = Color(0xFF1E4FA3),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFF7F7F5),
+    surfaceContainer = Color(0xFFF0F0EE),
+    surfaceContainerHigh = Color(0xFFEAEAE8),
+    surfaceContainerHighest = Color(0xFFE4E4E2),
+    outline = Color(0xFF757575),
+    outlineVariant = Color(0xFFBDBDBD),
 )
 
 private val DarkColors = darkColorScheme(
@@ -59,18 +66,18 @@ data class BoardColors(
 )
 
 private val LightBoardColors = BoardColors(
-    cellBackground = Color.White,
-    givenText = Color(0xFF1B1B1F),
-    enteredText = Color(0xFF1E4FA3),
-    errorText = Color(0xFFBA1A1A),
-    noteText = Color(0xFF6B7280),
-    selected = Color(0xFFBBD0FF),
-    related = Color(0xFFEAF0FF),
-    sameValue = Color(0xFFD5E0FF),
-    hintTarget = Color(0xFFFFE08A),
-    hintRelated = Color(0xFFFFF4D0),
-    thinLine = Color(0xFFC5C9D6),
-    thickLine = Color(0xFF2E3440),
+    cellBackground = Color(0xFFFFFFFF),
+    givenText = Color(0xFF000000),
+    enteredText = Color(0xFF0D3A8A),
+    errorText = Color(0xFFB00020),
+    noteText = Color(0xFF424242),
+    selected = Color(0xFFB3D4FF),
+    related = Color(0xFFEDEDED),
+    sameValue = Color(0xFFCFE0FF),
+    hintTarget = Color(0xFFFFD54F),
+    hintRelated = Color(0xFFFFF3C4),
+    thinLine = Color(0xFF9E9E9E),
+    thickLine = Color(0xFF000000),
 )
 
 private val DarkBoardColors = BoardColors(
@@ -257,8 +264,7 @@ val LocalBoardColors = staticCompositionLocalOf { LightBoardColors }
 @Composable
 fun SudokuTheme(
     appTheme: AppTheme = AppTheme.DEFAULT,
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    darkMode: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val premiumPalette = when (appTheme) {
@@ -267,15 +273,8 @@ fun SudokuTheme(
         AppTheme.RETRO_ARCADE -> RetroPalette
         AppTheme.ZEN_FOREST -> ZenPalette
     }
-    val colorScheme = premiumPalette?.scheme ?: when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColors
-        else -> LightColors
-    }
-    val boardColors = premiumPalette?.board ?: if (darkTheme) DarkBoardColors else LightBoardColors
+    val colorScheme = premiumPalette?.scheme ?: if (darkMode) DarkColors else LightColors
+    val boardColors = premiumPalette?.board ?: if (darkMode) DarkBoardColors else LightBoardColors
 
     androidx.compose.runtime.CompositionLocalProvider(LocalBoardColors provides boardColors) {
         MaterialTheme(colorScheme = colorScheme, content = content)

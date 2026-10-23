@@ -65,6 +65,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -243,11 +244,15 @@ fun GameScreen(
 
 @Composable
 private fun StatusRow(game: GameState, state: GameUiState) {
-    val secondary = MaterialTheme.colorScheme.secondary
+    val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    val comboColor = if (isLight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+    val glowColor = if (isLight) comboColor.copy(alpha = 0.45f) else comboColor
+    val minBlur = if (isLight) 4f else 6f
+    val maxBlur = if (isLight) 12f else 18f
     val glowTransition = rememberInfiniteTransition(label = "combo_glow")
     val blurRadius by glowTransition.animateFloat(
-        initialValue = 6f,
-        targetValue = if (state.comboActive) 18f else 6f,
+        initialValue = minBlur,
+        targetValue = if (state.comboActive) maxBlur else minBlur,
         animationSpec = infiniteRepeatable(
             animation = tween(800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse,
@@ -255,8 +260,8 @@ private fun StatusRow(game: GameState, state: GameUiState) {
         label = "combo_glow_radius",
     )
     val comboStyle = MaterialTheme.typography.bodyMedium.copy(
-        color = secondary,
-        shadow = Shadow(color = secondary, blurRadius = blurRadius),
+        color = comboColor,
+        shadow = Shadow(color = glowColor, blurRadius = blurRadius),
     )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(formatDuration(game.elapsedMillis), style = MaterialTheme.typography.titleLarge)
@@ -282,7 +287,7 @@ private fun StatusRow(game: GameState, state: GameUiState) {
         Text(
             stringResource(R.string.game_score, state.score?.total ?: 0),
             style = if (state.comboActive) comboStyle else MaterialTheme.typography.bodyMedium,
-            color = if (state.comboActive) secondary else MaterialTheme.colorScheme.primary,
+            color = if (state.comboActive) comboColor else MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.weight(1f))
         Icon(Icons.Default.Favorite, contentDescription = stringResource(R.string.game_lives), tint = MaterialTheme.colorScheme.error)

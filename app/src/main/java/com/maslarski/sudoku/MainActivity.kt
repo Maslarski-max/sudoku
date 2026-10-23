@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -31,19 +30,21 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
-            val appTheme by remember {
+            val themeSettings by remember {
                 combine(settingsRepository.settings, livesRepository.lives) { settings, lives ->
-                    settings.theme.effective(lives.unlimited)
+                    settings.theme.effective(lives.unlimited) to settings.darkMode
                 }
-            }.collectAsStateWithLifecycle(AppTheme.DEFAULT)
-            val darkBars = appTheme != AppTheme.DEFAULT || isSystemInDarkTheme()
+            }.collectAsStateWithLifecycle(AppTheme.DEFAULT to true)
+            val appTheme = themeSettings.first
+            val darkMode = themeSettings.second
+            val darkBars = appTheme.isPremium || darkMode
             SideEffect {
                 WindowCompat.getInsetsController(window, window.decorView).apply {
                     isAppearanceLightStatusBars = !darkBars
                     isAppearanceLightNavigationBars = !darkBars
                 }
             }
-            SudokuTheme(appTheme = appTheme) {
+            SudokuTheme(appTheme = appTheme, darkMode = darkMode) {
                 SudokuNavHost()
             }
         }

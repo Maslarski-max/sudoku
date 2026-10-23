@@ -52,6 +52,7 @@ interface SettingsRepository {
     suspend fun setVibrationEnabled(enabled: Boolean)
     suspend fun setShowCandidates(enabled: Boolean)
     suspend fun setTheme(theme: AppTheme)
+    suspend fun setDarkMode(darkMode: Boolean)
 }
 
 interface GameFeedback {

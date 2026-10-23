@@ -36,4 +36,8 @@ class SettingsViewModel @Inject constructor(
     fun setTheme(theme: AppTheme) {
         viewModelScope.launch { settingsRepository.setTheme(theme) }
     }
+
+    fun setDarkMode(darkMode: Boolean) {
+        viewModelScope.launch { settingsRepository.setDarkMode(darkMode) }
+    }
 }

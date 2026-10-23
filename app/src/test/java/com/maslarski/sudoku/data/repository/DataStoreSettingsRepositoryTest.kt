@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DataStoreSettingsRepositoryTest {
@@ -20,6 +22,15 @@ class DataStoreSettingsRepositoryTest {
     @Test
     fun `settings default to sound and vibration enabled`() = runTest {
         assertEquals(AppSettings(), repo.settings.first())
+    }
+
+    @Test
+    fun `dark mode defaults on and persists false`() = runTest {
+        assertTrue(repo.settings.first().darkMode)
+
+        repo.setDarkMode(false)
+
+        assertFalse(repo.settings.first().darkMode)
     }
 
     @Test

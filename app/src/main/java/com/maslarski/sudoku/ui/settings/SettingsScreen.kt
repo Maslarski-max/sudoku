@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Vibration
@@ -139,6 +140,22 @@ fun SettingsScreen(
                     Switch(checked = settings.vibrationEnabled, onCheckedChange = viewModel::setVibrationEnabled)
                 },
                 modifier = Modifier.clickable { viewModel.setVibrationEnabled(!settings.vibrationEnabled) },
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_light_mode)) },
+                supportingContent = if (selectedTheme.isPremium) {
+                    { Text(stringResource(R.string.settings_neon_dark_mode)) }
+                } else {
+                    null
+                },
+                leadingContent = { Icon(Icons.Default.LightMode, contentDescription = null) },
+                trailingContent = {
+                    Switch(
+                        checked = !settings.darkMode,
+                        onCheckedChange = { enabled -> viewModel.setDarkMode(!enabled) },
+                    )
+                },
+                modifier = Modifier.clickable { viewModel.setDarkMode(!settings.darkMode) },
             )
             ListItem(
                 headlineContent = { Text(stringResource(R.string.settings_privacy_policy)) },
