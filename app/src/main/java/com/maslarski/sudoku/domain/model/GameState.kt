@@ -18,6 +18,7 @@ data class GameState(
     val startedAtEpochMillis: Long,
     val lastPlayedEpochMillis: Long = startedAtEpochMillis,
     val outOfLivesDeadlineEpochMillis: Long? = null,
+    val outOfLivesExpired: Boolean = false,
 ) {
     val gridSize: GridSize get() = puzzle.gridSize
     val difficulty: Difficulty get() = puzzle.difficulty

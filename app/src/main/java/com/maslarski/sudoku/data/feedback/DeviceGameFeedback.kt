@@ -17,6 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,12 +30,21 @@ class DeviceGameFeedback @Inject constructor(
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val settings: StateFlow<AppSettings> =
         settingsRepository.settings.stateIn(appScope, SharingStarted.Eagerly, AppSettings())
-    private val toneGenerator by lazy { ToneGenerator(AudioManager.STREAM_MUSIC, 60) }
+    private val toneLock = Any()
+    private var toneGenerator: ToneGenerator? = null
     private val vibrator: Vibrator? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             context.getSystemService(VibratorManager::class.java)?.defaultVibrator
         } else {
             context.getSystemService(Vibrator::class.java)
+        }
+    }
+
+    init {
+        appScope.launch {
+            settings.collect { current ->
+                if (!current.soundEnabled) releaseToneGenerator()
+            }
         }
     }
 
@@ -62,11 +72,29 @@ class DeviceGameFeedback @Inject constructor(
 
     private fun play(tone: Int, durationMillis: Int, vibration: () -> VibrationEffect) {
         val currentSettings = settings.value
-        if (currentSettings.soundEnabled) runCatching { toneGenerator.startTone(tone, durationMillis) }
+        if (currentSettings.soundEnabled) {
+            runCatching {
+                synchronized(toneLock) {
+                    if (settings.value.soundEnabled) {
+                        val generator = toneGenerator
+                            ?: ToneGenerator(AudioManager.STREAM_MUSIC, 60).also { toneGenerator = it }
+                        generator.startTone(tone, durationMillis)
+                    }
+                }
+            }
+        }
         if (currentSettings.vibrationEnabled) {
             runCatching {
                 vibrator?.takeIf { it.hasVibrator() }?.vibrate(vibration())
             }
+        }
+    }
+
+    private fun releaseToneGenerator() {
+        synchronized(toneLock) {
+            val generator = toneGenerator
+            toneGenerator = null
+            if (generator != null) runCatching { generator.release() }
         }
     }
 }

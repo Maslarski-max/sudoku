@@ -24,6 +24,7 @@ import com.maslarski.sudoku.domain.repository.SavedGameSummary
 import com.maslarski.sudoku.domain.repository.SettingsRepository
 import com.maslarski.sudoku.domain.time.EpochClock
 import com.maslarski.sudoku.domain.usecase.SubmitScoreUseCase
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -55,7 +56,10 @@ class GameViewModelTest {
     private val reviewPrompt = FakeReviewPromptRepository()
     private val feedback = RecordingGameFeedback()
     private val settings = FakeSettingsRepository()
-    private val clock = EpochClock { 1_700_000_000_000L + dispatcher.scheduler.currentTime }
+    private var clockOffsetMillis = 0L
+    private val clock = EpochClock {
+        1_700_000_000_000L + dispatcher.scheduler.currentTime + clockOffsetMillis
+    }
     private val store = ViewModelStore()
 
     @Before
@@ -322,6 +326,7 @@ class GameViewModelTest {
         assertTrue(reset.undoStack.isEmpty())
         assertTrue(reset.redoStack.isEmpty())
         assertNull(reset.outOfLivesDeadlineEpochMillis)
+        assertTrue(reset.outOfLivesExpired)
         assertEquals(reset.cells, games.saved[GridSize.NINE]?.cells)
         assertTrue(vm.uiState.value.progressReset)
         assertNull(vm.uiState.value.outOfLivesSecondsLeft)
@@ -369,6 +374,129 @@ class GameViewModelTest {
         assertEquals(1, reset.hintsUsed)
         assertTrue(vm.uiState.value.progressReset)
         assertNull(reset.outOfLivesDeadlineEpochMillis)
+        assertTrue(reset.outOfLivesExpired)
+    }
+
+    @Test
+    fun `past deadline at load with lives available resets board and keeps stats`() = vmTest {
+        lives.state.value = Lives(count = 5, unlimited = false)
+        val enteredIndex = initial.firstEmpty()
+        val saved = initial.copy(
+            cells = initial.cells.toMutableList().also {
+                it[enteredIndex] = Cell(value = initial.puzzle.solution[enteredIndex])
+            },
+            elapsedMillis = 72_000L,
+            moves = 9,
+            mistakes = 4,
+            mistakeStreak = 1,
+            hintsUsed = 2,
+            startedAtEpochMillis = 123L,
+            outOfLivesDeadlineEpochMillis = clock.now() - 1L,
+        )
+        games.saved[GridSize.NINE] = saved
+        val loadGate = CompletableDeferred<Unit>()
+        games.loadGate = loadGate
+        val vm = viewModel()
+        dispatcher.scheduler.runCurrent()
+        assertEquals(Lives(count = 5, unlimited = false), vm.uiState.value.lives)
+        loadGate.complete(Unit)
+        dispatcher.scheduler.runCurrent()
+
+        val settled = vm.uiState.value.game!!
+        assertEquals(initial.puzzle.givens.toList(), settled.cells.map { it.value })
+        assertEquals(saved.elapsedMillis, settled.elapsedMillis)
+        assertEquals(saved.moves, settled.moves)
+        assertEquals(saved.mistakes, settled.mistakes)
+        assertEquals(saved.mistakeStreak, settled.mistakeStreak)
+        assertEquals(saved.hintsUsed, settled.hintsUsed)
+        assertEquals(saved.startedAtEpochMillis, settled.startedAtEpochMillis)
+        assertNull(settled.outOfLivesDeadlineEpochMillis)
+        assertFalse(settled.outOfLivesExpired)
+        assertEquals(PauseReason.NONE, vm.uiState.value.pauseReason)
+        assertFalse(vm.uiState.value.progressReset)
+        assertEquals(settled.cells, games.saved[GridSize.NINE]?.cells)
+    }
+
+    @Test
+    fun `lives restored after deadline passes settle board before countdown tick`() = vmTest {
+        lives.state.value = Lives(count = 0, unlimited = false)
+        val enteredIndex = initial.firstEmpty()
+        val saved = initial.copy(
+            cells = initial.cells.toMutableList().also {
+                it[enteredIndex] = Cell(value = initial.puzzle.solution[enteredIndex])
+            },
+            elapsedMillis = 72_000L,
+            moves = 9,
+            mistakes = 4,
+            mistakeStreak = 1,
+            hintsUsed = 2,
+            startedAtEpochMillis = 123L,
+            outOfLivesDeadlineEpochMillis = clock.now() + 60_000L,
+        )
+        games.saved[GridSize.NINE] = saved
+        val vm = viewModel()
+        dispatcher.scheduler.runCurrent()
+        assertEquals(60, vm.uiState.value.outOfLivesSecondsLeft)
+
+        clockOffsetMillis = 60_001L
+        lives.addLives(5)
+        dispatcher.scheduler.runCurrent()
+
+        val settled = vm.uiState.value.game!!
+        assertEquals(initial.puzzle.givens.toList(), settled.cells.map { it.value })
+        assertEquals(saved.elapsedMillis, settled.elapsedMillis)
+        assertEquals(saved.moves, settled.moves)
+        assertEquals(saved.mistakes, settled.mistakes)
+        assertEquals(saved.mistakeStreak, settled.mistakeStreak)
+        assertEquals(saved.hintsUsed, settled.hintsUsed)
+        assertEquals(saved.startedAtEpochMillis, settled.startedAtEpochMillis)
+        assertNull(settled.outOfLivesDeadlineEpochMillis)
+        assertFalse(settled.outOfLivesExpired)
+        assertEquals(PauseReason.NONE, vm.uiState.value.pauseReason)
+        assertNull(vm.uiState.value.outOfLivesSecondsLeft)
+        assertFalse(vm.uiState.value.progressReset)
+        assertEquals(settled.cells, games.saved[GridSize.NINE]?.cells)
+    }
+
+    @Test
+    fun `expired reset survives reopen and clears expired flag when lives return`() = vmTest {
+        lives.state.value = Lives(count = 0, unlimited = false)
+        val enteredIndex = initial.firstEmpty()
+        initial = initial.copy(
+            cells = initial.cells.toMutableList().also {
+                it[enteredIndex] = Cell(value = initial.puzzle.solution[enteredIndex])
+            },
+            moves = 3,
+            hintsUsed = 1,
+        )
+        games.saved[GridSize.NINE] = initial
+
+        viewModel()
+        dispatcher.scheduler.runCurrent()
+        dispatcher.scheduler.advanceTimeBy(61_000L)
+        dispatcher.scheduler.runCurrent()
+        assertTrue(games.saved[GridSize.NINE]?.outOfLivesExpired == true)
+
+        store.clear()
+        val reopenedViewModel = viewModel()
+        dispatcher.scheduler.runCurrent()
+
+        assertTrue(reopenedViewModel.uiState.value.progressReset)
+        assertNull(reopenedViewModel.uiState.value.outOfLivesSecondsLeft)
+        assertNull(reopenedViewModel.uiState.value.game?.outOfLivesDeadlineEpochMillis)
+        assertTrue(reopenedViewModel.uiState.value.game?.outOfLivesExpired == true)
+
+        lives.addLives(5)
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals(PauseReason.NONE, reopenedViewModel.uiState.value.pauseReason)
+        assertFalse(reopenedViewModel.uiState.value.progressReset)
+        assertFalse(reopenedViewModel.uiState.value.game!!.outOfLivesExpired)
+        assertNull(reopenedViewModel.uiState.value.game?.outOfLivesDeadlineEpochMillis)
+        assertEquals(
+            initial.puzzle.givens.toList(),
+            reopenedViewModel.uiState.value.game?.cells?.map { it.value },
+        )
     }
 
     @Test
@@ -479,8 +607,12 @@ class GameViewModelTest {
 
 private class FakeGameRepository : GameRepository {
     val saved = mutableMapOf<GridSize, GameState>()
+    var loadGate: CompletableDeferred<Unit>? = null
     override fun observeSavedGames(): Flow<List<SavedGameSummary>> = flowOf(emptyList())
-    override suspend fun load(gridSize: GridSize): GameState? = saved[gridSize]
+    override suspend fun load(gridSize: GridSize): GameState? {
+        loadGate?.await()
+        return saved[gridSize]
+    }
     override suspend fun save(state: GameState) { saved[state.gridSize] = state }
     override suspend fun delete(gridSize: GridSize) { saved.remove(gridSize) }
 }

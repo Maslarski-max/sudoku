@@ -56,6 +56,7 @@ class GameStateSerializer @Inject constructor() {
         val startedAt: Long,
         val lastPlayedAt: Long,
         val outOfLivesDeadline: Long? = null,
+        val outOfLivesExpired: Boolean = false,
     ) {
         fun toState(): GameState = GameState(
             puzzle = Puzzle(
@@ -77,6 +78,7 @@ class GameStateSerializer @Inject constructor() {
             startedAtEpochMillis = startedAt,
             lastPlayedEpochMillis = lastPlayedAt,
             outOfLivesDeadlineEpochMillis = outOfLivesDeadline,
+            outOfLivesExpired = outOfLivesExpired,
         )
 
         companion object {
@@ -98,6 +100,7 @@ class GameStateSerializer @Inject constructor() {
                 startedAt = s.startedAtEpochMillis,
                 lastPlayedAt = s.lastPlayedEpochMillis,
                 outOfLivesDeadline = s.outOfLivesDeadlineEpochMillis,
+                outOfLivesExpired = s.outOfLivesExpired,
             )
         }
     }

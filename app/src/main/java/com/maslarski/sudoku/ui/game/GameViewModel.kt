@@ -99,12 +99,19 @@ class GameViewModel @Inject constructor(
             if (loaded == null) {
                 local.update { it.copy(missing = true) }
             } else {
-                val game = if (local.value.lives?.canPlay == true && loaded.outOfLivesDeadlineEpochMillis != null) {
-                    loaded.copy(outOfLivesDeadlineEpochMillis = null)
+                val livesRestored = local.value.lives?.canPlay == true
+                val game = if (livesRestored) {
+                    settleDeadline(loaded, clock.now())
                 } else {
                     loaded
                 }
-                local.update { it.copy(game = game) }
+                local.update {
+                    it.copy(
+                        game = game,
+                        progressReset = !livesRestored && game.outOfLivesExpired,
+                        outOfLivesSecondsLeft = null,
+                    )
+                }
                 if (game != loaded) gameRepository.save(game)
                 if (game.isComplete) {
                     local.update { it.copy(scoreSubmission = ScoreSubmission.Submitted) }
@@ -136,9 +143,10 @@ class GameViewModel @Inject constructor(
                 val canPlayAgain = lives.canPlay
                 local.update { s ->
                     var game = s.game
-                    if (canPlayAgain && game?.outOfLivesDeadlineEpochMillis != null) {
-                        game = game.copy(outOfLivesDeadlineEpochMillis = null)
-                        gameToSave = game
+                    if (canPlayAgain && game != null) {
+                        val settled = settleDeadline(game, clock.now())
+                        if (settled != game) gameToSave = settled
+                        game = settled
                     }
                     val next = s.copy(lives = lives, game = game)
                     val updated = when {
@@ -147,11 +155,17 @@ class GameViewModel @Inject constructor(
                             next.copy(pauseReason = PauseReason.NONE, outOfLivesSecondsLeft = null, progressReset = false)
                         else -> next
                     }
+                    val expired = !canPlayAgain && updated.game?.outOfLivesExpired == true
+                    val result = if (expired) {
+                        updated.copy(progressReset = true, outOfLivesSecondsLeft = null)
+                    } else {
+                        updated
+                    }
                     becameOutOfLives = s.pauseReason != PauseReason.OUT_OF_LIVES &&
-                        updated.pauseReason == PauseReason.OUT_OF_LIVES
-                    updated
+                        result.pauseReason == PauseReason.OUT_OF_LIVES
+                    result
                 }
-                gameToSave?.let { game -> viewModelScope.launch { gameRepository.save(game) } }
+                gameToSave?.let { game -> gameRepository.save(game) }
                 if (canPlayAgain) {
                     outOfLivesCountdownJob?.cancel()
                     outOfLivesCountdownJob = null
@@ -184,10 +198,15 @@ class GameViewModel @Inject constructor(
 
     private fun startOutOfLivesCountdownIfNeeded() {
         val state = local.value
-        if (state.pauseReason != PauseReason.OUT_OF_LIVES || state.game?.isComplete != false) return
+        if (state.pauseReason != PauseReason.OUT_OF_LIVES) return
+        val game = state.game ?: return
+        if (game.isComplete) return
+        if (game.outOfLivesExpired) {
+            local.update { it.copy(outOfLivesSecondsLeft = null, progressReset = true) }
+            return
+        }
         if (state.progressReset) return
         if (outOfLivesCountdownJob?.isActive == true) return
-        val game = checkNotNull(state.game)
         val now = clock.now()
         val deadline = game.outOfLivesDeadlineEpochMillis ?: now + GameRules.OUT_OF_LIVES_COUNTDOWN_SECONDS * 1_000L
         val timedGame = if (game.outOfLivesDeadlineEpochMillis == null) {
@@ -201,7 +220,7 @@ class GameViewModel @Inject constructor(
         }
         val initialSecondsLeft = secondsUntil(deadline, now)
         if (initialSecondsLeft <= 0) {
-            expireOutOfLivesGame(timedGame)
+            viewModelScope.launch { expireOutOfLivesGame(timedGame) }
             return
         }
         local.update {
@@ -230,14 +249,28 @@ class GameViewModel @Inject constructor(
         return ((millisLeft + 999L) / 1_000L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
     }
 
-    private fun expireOutOfLivesGame(game: GameState) {
-        val resetCells = GameState.fromPuzzle(game.puzzle, clock.now()).cells
-        val reset = game.copy(
+    private fun settleDeadline(game: GameState, now: Long): GameState {
+        val deadline = game.outOfLivesDeadlineEpochMillis
+        return if (deadline != null && deadline <= now) {
+            resetOutOfLivesGame(game, expired = false, nowEpochMillis = now)
+        } else {
+            game.copy(outOfLivesDeadlineEpochMillis = null, outOfLivesExpired = false)
+        }
+    }
+
+    private fun resetOutOfLivesGame(game: GameState, expired: Boolean, nowEpochMillis: Long): GameState {
+        val resetCells = GameState.fromPuzzle(game.puzzle, nowEpochMillis).cells
+        return game.copy(
             cells = resetCells,
             undoStack = emptyList(),
             redoStack = emptyList(),
             outOfLivesDeadlineEpochMillis = null,
+            outOfLivesExpired = expired,
         )
+    }
+
+    private suspend fun expireOutOfLivesGame(game: GameState) {
+        val reset = resetOutOfLivesGame(game, expired = true, nowEpochMillis = clock.now())
         var didReset = false
         local.update { state ->
             if (state.pauseReason != PauseReason.OUT_OF_LIVES ||
@@ -256,7 +289,7 @@ class GameViewModel @Inject constructor(
             }
         }
         outOfLivesCountdownJob = null
-        if (didReset) viewModelScope.launch { gameRepository.save(reset) }
+        if (didReset) gameRepository.save(reset)
     }
 
     fun pause(reason: PauseReason = PauseReason.USER) {
