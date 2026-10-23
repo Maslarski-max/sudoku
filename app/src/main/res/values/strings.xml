@@ -67,7 +67,7 @@
     <string name="game_notes_on">Notes on</string>
     <string name="game_candidates">Candidates</string>
     <string name="candidates_upsell_title">Unlock Candidates &amp; Notes!</string>
-    <string name="candidates_upsell_body">Upgrade to the Unlimited Version to reveal grid candidates instantly, get infinite hints, unlimited lives, and 100% ad-free gameplay forever.</string>
+    <string name="candidates_upsell_body" formatted="false">Upgrade to the Unlimited Version to reveal grid candidates instantly, get infinite hints, unlimited lives, and 100% ad-free gameplay forever.</string>
     <string name="candidates_upsell_upgrade">Upgrade</string>
     <string name="candidates_upsell_not_now">Not now</string>
     <string name="game_hint">Hint</string>
