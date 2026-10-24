@@ -4,6 +4,7 @@ import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Variant
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /** Itemised score for a game; [total] is what gets ranked on the leaderboard. */
@@ -54,6 +55,47 @@ object ScoringRules {
         Difficulty.HARD -> 2.0
     }
 
+    fun effectiveDifficulty(
+        claimed: Difficulty,
+        variant: Variant?,
+        activeCellCount: Int,
+        emptyCells: Int,
+    ): Difficulty {
+        val mediumFloor = if (variant == null) {
+            floor(activeCellCount * 0.42).toInt()
+        } else {
+            activeCellCount - targetGivens(variant, Difficulty.EASY)
+        }
+        val hardFloor = if (variant == null) {
+            floor(activeCellCount * 0.52).toInt()
+        } else {
+            activeCellCount - targetGivens(variant, Difficulty.MEDIUM)
+        }
+        return when {
+            claimed == Difficulty.HARD && emptyCells >= hardFloor -> Difficulty.HARD
+            claimed != Difficulty.EASY && emptyCells >= mediumFloor -> Difficulty.MEDIUM
+            else -> Difficulty.EASY
+        }
+    }
+
+    private fun targetGivens(variant: Variant, difficulty: Difficulty): Int = when (variant) {
+        Variant.SAMURAI -> when (difficulty) {
+            Difficulty.EASY -> 190
+            Difficulty.MEDIUM -> 165
+            Difficulty.HARD -> 145
+        }
+        Variant.FLOWER -> when (difficulty) {
+            Difficulty.EASY -> 105
+            Difficulty.MEDIUM -> 92
+            Difficulty.HARD -> 82
+        }
+        Variant.OUTSIDE -> when (difficulty) {
+            Difficulty.EASY -> 30
+            Difficulty.MEDIUM -> 25
+            Difficulty.HARD -> 20
+        }
+    }
+
     /** Seconds budgeted per empty cell; the target time scales with the amount of work in the puzzle. */
     private fun secondsPerCell(difficulty: Difficulty): Int = when (difficulty) {
         Difficulty.EASY -> 12
@@ -61,10 +103,14 @@ object ScoringRules {
         Difficulty.HARD -> 20
     }
 
-    fun targetTimeMillis(state: GameState): Long =
-        emptyCells(state).toLong() * secondsPerCell(state.difficulty) * 1_000L
+    fun targetTimeMillis(state: GameState): Long {
+        val emptyCells = emptyCells(state)
+        return targetTimeMillis(emptyCells, effectiveDifficulty(state, emptyCells))
+    }
 
     fun breakdown(state: GameState): ScoreBreakdown {
+        val emptyCells = emptyCells(state)
+        val scoredDifficulty = effectiveDifficulty(state, emptyCells)
         val base = basePoints(state)
         val correct = (correctPlayerCells(state) - state.hintsUsed).coerceAtLeast(0)
         val comboBonus = state.topology.activeIndices.count { index ->
@@ -72,8 +118,8 @@ object ScoringRules {
             cell.combo && !cell.isGiven && cell.value == state.puzzle.solution[index]
         } * base
         val penalty = state.mistakes * MISTAKE_PENALTY
-        val bonus = if (state.isComplete) timeBonus(state, base) else 0
-        val multiplier = multiplier(state.difficulty)
+        val bonus = if (state.isComplete) timeBonus(state, base, emptyCells, scoredDifficulty) else 0
+        val multiplier = multiplier(scoredDifficulty)
         val raw = correct * base + comboBonus - penalty + bonus
         return ScoreBreakdown(
             correctEntries = correct,
@@ -86,14 +132,30 @@ object ScoringRules {
         )
     }
 
+    private fun effectiveDifficulty(state: GameState, emptyCells: Int): Difficulty =
+        effectiveDifficulty(
+            claimed = state.difficulty,
+            variant = state.variant,
+            activeCellCount = state.topology.activeIndices.size,
+            emptyCells = emptyCells,
+        )
+
+    private fun targetTimeMillis(emptyCells: Int, difficulty: Difficulty): Long =
+        emptyCells.toLong() * secondsPerCell(difficulty) * 1_000L
+
     /** Score as it stands right now; shown live during play and equal to the final score on completion. */
     fun points(state: GameState): Int = breakdown(state).total
 
-    private fun timeBonus(state: GameState, base: Int): Int {
-        val target = targetTimeMillis(state)
+    private fun timeBonus(
+        state: GameState,
+        base: Int,
+        emptyCells: Int,
+        difficulty: Difficulty,
+    ): Int {
+        val target = targetTimeMillis(emptyCells, difficulty)
         val remaining = target - state.elapsedMillis
         if (target <= 0L || remaining <= 0L) return 0
-        val maxBonus = base * emptyCells(state)
+        val maxBonus = base * emptyCells
         return (maxBonus * remaining.toDouble() / target).roundToInt()
     }
 

@@ -136,6 +136,28 @@ test("effective difficulty caps points to empties and claimed difficulty", () =>
   assert.equal(easyResult.points, computePoints(claimedEasy, 50, "EASY"));
 });
 
+test("35-empty claimed-hard Classic matches the client score at effective Medium", () => {
+  const givens = [...validClassic.solutionCells];
+  const activeIndices = validClassic.solutionCells.flatMap((value, index) => value === 0 ? [] : [index]);
+  for (const index of activeIndices.slice(0, 35)) givens[index] = 0;
+  const request = {
+    ...validClassic,
+    difficulty: "HARD",
+    givens,
+    comboCells: [],
+    elapsedMillis: 280_000,
+    moves: 35,
+    mistakes: 0,
+    hintsUsed: 0,
+  };
+
+  const validated = validateCompletion(request, Date.parse("2026-10-24T12:00:00Z"));
+  assert.equal(validated.emptyCells, 35);
+  assert.equal(validated.effectiveDifficulty, "MEDIUM");
+  assert.equal(computePoints(request, validated.emptyCells, validated.effectiveDifficulty), 788);
+  assert.equal(validated.points, 788);
+});
+
 test("daily dedupe identity is scoped to the user and date", () => {
   const daily = byName["daily-medium"].payload;
   assert.equal(dailyCompletionDocumentId(daily), daily.dailyDate);
