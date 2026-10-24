@@ -156,6 +156,13 @@ function shapeRequest(data: unknown): { request: CompletionRequest; topology: Su
   }
 
   const topology = createTopology(kind, variant, gridSize);
+  const activeCellCount = topology.activeIndices.length;
+  const moves = data.moves as number;
+  const mistakes = data.mistakes as number;
+  const hintsUsed = data.hintsUsed as number;
+  if (moves > activeCellCount * 10) invalid("moves exceeds the supported range.");
+  if (mistakes > activeCellCount * 10) invalid("mistakes exceeds the supported range.");
+  if (hintsUsed > activeCellCount) invalid("hintsUsed exceeds the active cell count.");
   if (data.givens.length !== topology.width * topology.height ||
       data.solutionCells.length !== topology.width * topology.height) {
     invalid("givens and solutionCells must cover the full topology canvas.");
@@ -298,16 +305,7 @@ export function minimumEmptyCells(
   request: CompletionRequest,
   topology = createTopology(request.kind, request.variant, request.gridSize),
 ): number {
-  if (request.variant === undefined) {
-    const fraction = { EASY: 0.42, MEDIUM: 0.52, HARD: 0.62 }[request.difficulty];
-    return Math.floor(request.gridSize * request.gridSize * fraction);
-  }
-  const targetGivens = request.variant === "SAMURAI"
-    ? { EASY: 190, MEDIUM: 165, HARD: 145 }[request.difficulty]
-    : request.variant === "FLOWER"
-      ? { EASY: 105, MEDIUM: 92, HARD: 82 }[request.difficulty]
-      : { EASY: 30, MEDIUM: 25, HARD: 20 }[request.difficulty];
-  return topology.activeIndices.length - targetGivens;
+  return Math.floor(topology.activeIndices.length * 0.25);
 }
 
 function validatePlausibility(
@@ -364,4 +362,8 @@ export function validateCompletion(data: unknown, nowMillis = Date.now()): Valid
 export function completionDocumentId(request: CompletionRequest): string {
   const key = `${request.kind}|${request.variant ?? ""}|${request.gridSize}|${request.givens.join(",")}`;
   return createHash("sha256").update(key).digest("hex");
+}
+
+export function dailyCompletionDocumentId(request: CompletionRequest): string | undefined {
+  return request.kind === "DAILY" ? request.dailyDate : undefined;
 }

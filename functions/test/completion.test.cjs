@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const {
   completionDocumentId,
+  dailyCompletionDocumentId,
   minimumEmptyCells,
   requireAuthenticated,
   validateCompletion,
@@ -35,6 +36,10 @@ test("rejects invalid shape, enums, array lengths, and values", () => {
   expectCode(() => validateCompletion({ ...validClassic, givens: [] }), "invalid-argument");
   expectCode(() => validateCompletion({ ...validClassic, elapsedMillis: 0 }), "invalid-argument");
   expectCode(() => validateCompletion({ ...validClassic, moves: -1 }), "invalid-argument");
+  const activeCells = validClassic.gridSize * validClassic.gridSize;
+  expectCode(() => validateCompletion({ ...validClassic, moves: activeCells * 10 + 1 }), "invalid-argument");
+  expectCode(() => validateCompletion({ ...validClassic, mistakes: activeCells * 10 + 1 }), "invalid-argument");
+  expectCode(() => validateCompletion({ ...validClassic, hintsUsed: activeCells + 1 }), "invalid-argument");
   const outOfRange = [...validClassic.solutionCells];
   outOfRange[0] = 10;
   expectCode(() => validateCompletion({ ...validClassic, solutionCells: outOfRange }), "invalid-argument");
@@ -64,9 +69,14 @@ test("rejects Outside clue violations", () => {
 test("rejects implausible completion time, empties, combos, and stale daily dates", () => {
   const empties = validClassic.givens.filter((value) => value === 0).length;
   expectCode(() => validateCompletion({ ...validClassic, elapsedMillis: empties * 1_000 - 1 }), "failed-precondition");
-  const tooFewEmpties = [...validClassic.givens];
-  const emptyIndex = tooFewEmpties.findIndex((value) => value === 0);
-  tooFewEmpties[emptyIndex] = validClassic.solutionCells[emptyIndex];
+  const tooFewEmpties = [...validClassic.solutionCells];
+  let remainingEmpties = minimumEmptyCells(validClassic) - 1;
+  for (let index = 0; index < validClassic.givens.length && remainingEmpties > 0; index++) {
+    if (validClassic.givens[index] === 0) {
+      tooFewEmpties[index] = 0;
+      remainingEmpties--;
+    }
+  }
   expectCode(() => validateCompletion({ ...validClassic, givens: tooFewEmpties }), "failed-precondition");
   const givenIndex = validClassic.givens.findIndex((value) => value !== 0);
   expectCode(() => validateCompletion({ ...validClassic, comboCells: [givenIndex] }), "failed-precondition");
@@ -80,10 +90,20 @@ test("rejects implausible completion time, empties, combos, and stale daily date
 });
 
 test("generator thresholds and dedupe identity are stable", () => {
-  assert.equal(minimumEmptyCells(validClassic), Math.floor(81 * 0.42));
+  for (const fixture of fixtures) {
+    const activeCells = fixture.payload.solutionCells.filter((value) => value !== 0).length;
+    assert.equal(minimumEmptyCells(fixture.payload), Math.floor(activeCells * 0.25), fixture.name);
+  }
   const id = completionDocumentId(validClassic);
   assert.equal(id, completionDocumentId({ ...validClassic }));
   const changed = { ...validClassic, givens: [...validClassic.givens] };
   changed.givens[0] = validClassic.solutionCells[0];
   assert.notEqual(id, completionDocumentId(changed));
+});
+
+test("daily dedupe identity is scoped to the user and date", () => {
+  const daily = byName["daily-medium"].payload;
+  assert.equal(dailyCompletionDocumentId(daily), daily.dailyDate);
+  assert.equal(dailyCompletionDocumentId({ ...daily, dailyDate: "2026-10-25" }), "2026-10-25");
+  assert.equal(dailyCompletionDocumentId(validClassic), undefined);
 });
