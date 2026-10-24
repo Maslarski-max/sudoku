@@ -11,6 +11,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
+import com.maslarski.sudoku.BuildConfig
+import com.maslarski.sudoku.data.billing.FakeBillingRepository
 import com.maslarski.sudoku.data.billing.PlayBillingRepository
 import com.maslarski.sudoku.data.feedback.DeviceGameFeedback
 import com.maslarski.sudoku.data.local.LeaderboardDao
@@ -53,6 +55,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import javax.inject.Provider
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -146,9 +149,19 @@ abstract class RepositoryModule {
     @Binds abstract fun bindGameFeedback(impl: DeviceGameFeedback): GameFeedback
     @Binds abstract fun bindAuthRepository(impl: FirebaseAuthRepository): AuthRepository
     @Binds abstract fun bindLeaderboardRepository(impl: FirestoreLeaderboardRepository): LeaderboardRepository
-    @Binds abstract fun bindBillingRepository(impl: PlayBillingRepository): BillingRepository
     @Binds abstract fun bindDailyChallengeRepository(impl: DataStoreDailyChallengeRepository): DailyChallengeRepository
     @Binds abstract fun bindTournamentPendingQueue(impl: DataStoreTournamentPendingQueue): TournamentPendingQueue
     @Binds abstract fun bindTournamentRepository(impl: FirestoreTournamentRepository): TournamentRepository
     @Binds abstract fun bindTrophyRepository(impl: DataStoreTrophyRepository): TrophyRepository
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object BillingModule {
+    @Provides
+    @Singleton
+    fun provideBillingRepository(
+        play: Provider<PlayBillingRepository>,
+        fake: Provider<FakeBillingRepository>,
+    ): BillingRepository = if (BuildConfig.FAKE_BILLING) fake.get() else play.get()
 }

@@ -50,7 +50,6 @@ android {
         buildConfigField("int", "FIREBASE_AUTH_EMULATOR_PORT", "9099")
         buildConfigField("int", "FIREBASE_FIRESTORE_EMULATOR_PORT", "8080")
         buildConfigField("int", "FIREBASE_FUNCTIONS_EMULATOR_PORT", "5001")
-        buildConfigField("int", "FIREBASE_FUNCTIONS_EMULATOR_PORT", "5001")
     }
 
     signingConfigs {
@@ -67,6 +66,9 @@ android {
     buildTypes {
         debug {
             buildConfigField("boolean", "USE_FIREBASE_EMULATOR", "true")
+            // -PfakeBilling=true swaps Play Billing for an in-memory store (emulators without Google Play).
+            val fakeBilling = gradle.startParameter.projectProperties["fakeBilling"] == "true"
+            buildConfigField("boolean", "FAKE_BILLING", fakeBilling.toString())
         }
         release {
             isMinifyEnabled = true
@@ -74,6 +76,7 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = if (releaseSigning != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
             buildConfigField("boolean", "USE_FIREBASE_EMULATOR", "false")
+            buildConfigField("boolean", "FAKE_BILLING", "false")
         }
     }
 
@@ -167,7 +170,6 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
-    implementation(libs.firebase.functions)
     implementation(libs.firebase.functions)
     implementation(libs.play.billing)
     implementation(libs.play.review)

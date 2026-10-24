@@ -11,6 +11,7 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maslarski.sudoku.data.billing.PlayBillingRepository
 import com.maslarski.sudoku.domain.model.AppTheme
+import com.maslarski.sudoku.domain.repository.BillingRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.SettingsRepository
 import com.maslarski.sudoku.ui.navigation.SudokuNavHost
@@ -22,7 +23,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    @Inject lateinit var billing: PlayBillingRepository
+    @Inject lateinit var billing: BillingRepository
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var livesRepository: LivesRepository
 
@@ -52,11 +53,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        billing.attachActivity(this)
+        (billing as? PlayBillingRepository)?.attachActivity(this)
     }
 
     override fun onStop() {
-        billing.detachActivity(this)
+        (billing as? PlayBillingRepository)?.detachActivity(this)
         super.onStop()
     }
 }
