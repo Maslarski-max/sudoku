@@ -28,7 +28,13 @@ class TournamentQueueFlusherTest {
 
     @Test
     fun `retryable callable codes keep payload queued`() = runTest {
-        val retryable = listOf("UNAVAILABLE", "DEADLINE_EXCEEDED", "INTERNAL", "UNKNOWN")
+        val retryable = listOf(
+            "UNAVAILABLE",
+            "DEADLINE_EXCEEDED",
+            "INTERNAL",
+            "UNKNOWN",
+            "RESOURCE_EXHAUSTED",
+        )
         retryable.forEach { code ->
             assertTrue(code, isRetryableCompletionFailure(CallableCompletionFailure(code)))
         }
@@ -40,7 +46,6 @@ class TournamentQueueFlusherTest {
             "INVALID_ARGUMENT",
             "FAILED_PRECONDITION",
             "ALREADY_EXISTS",
-            "RESOURCE_EXHAUSTED",
             "PERMISSION_DENIED",
         )
         permanent.forEach { code ->
@@ -72,6 +77,22 @@ class TournamentQueueFlusherTest {
 
         assertEquals(QueueFlushResult.RETRY, result)
         assertEquals(listOf("retry"), queue.pending)
+    }
+
+    @Test
+    fun `flush retains throttled and later payloads without submitting later entries`() = runTest {
+        val queue = FakePendingQueue(mutableListOf("success", "throttled", "later"))
+        val submitted = mutableListOf<String>()
+        val result = flushCompletionQueue(queue, "player") { item, _ ->
+            submitted += item
+            if (item == "throttled") {
+                throw CallableCompletionFailure("RESOURCE_EXHAUSTED")
+            }
+        }
+
+        assertEquals(QueueFlushResult.RETRY, result)
+        assertEquals(listOf("throttled", "later"), queue.pending)
+        assertEquals(listOf("success", "throttled"), submitted)
     }
 
     @Test

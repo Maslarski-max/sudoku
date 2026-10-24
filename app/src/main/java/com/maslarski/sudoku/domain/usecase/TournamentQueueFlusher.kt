@@ -57,6 +57,10 @@ suspend fun flushCompletionQueue(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
+            if (error is CallableCompletionFailure && error.code == "RESOURCE_EXHAUSTED") {
+                shouldRetry = true
+                break
+            }
             if (isRetryableCompletionFailure(error)) {
                 shouldRetry = true
             } else {
@@ -72,4 +76,5 @@ private val RETRYABLE_CODES = setOf(
     "DEADLINE_EXCEEDED",
     "INTERNAL",
     "UNKNOWN",
+    "RESOURCE_EXHAUSTED",
 )
