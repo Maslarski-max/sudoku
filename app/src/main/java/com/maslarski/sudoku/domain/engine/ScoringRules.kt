@@ -3,6 +3,7 @@ package com.maslarski.sudoku.domain.engine
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
+import com.maslarski.sudoku.domain.model.Variant
 import kotlin.math.roundToInt
 
 /** Itemised score for a game; [total] is what gets ranked on the leaderboard. */
@@ -40,6 +41,13 @@ object ScoringRules {
         GridSize.EIGHTEEN -> 25
     }
 
+    fun basePoints(state: GameState): Int = when (state.variant) {
+        Variant.SAMURAI -> 30
+        Variant.FLOWER -> 25
+        Variant.OUTSIDE -> 15
+        null -> basePoints(state.gridSize)
+    }
+
     fun multiplier(difficulty: Difficulty): Double = when (difficulty) {
         Difficulty.EASY -> 1.0
         Difficulty.MEDIUM -> 1.5
@@ -57,9 +65,9 @@ object ScoringRules {
         emptyCells(state).toLong() * secondsPerCell(state.difficulty) * 1_000L
 
     fun breakdown(state: GameState): ScoreBreakdown {
-        val base = basePoints(state.gridSize)
+        val base = basePoints(state)
         val correct = (correctPlayerCells(state) - state.hintsUsed).coerceAtLeast(0)
-        val comboBonus = state.cells.indices.count { index ->
+        val comboBonus = state.topology.activeIndices.count { index ->
             val cell = state.cells[index]
             cell.combo && !cell.isGiven && cell.value == state.puzzle.solution[index]
         } * base
@@ -89,10 +97,11 @@ object ScoringRules {
         return (maxBonus * remaining.toDouble() / target).roundToInt()
     }
 
-    private fun emptyCells(state: GameState): Int = state.puzzle.givens.count { it == 0 }
+    private fun emptyCells(state: GameState): Int =
+        state.topology.activeIndices.count { state.puzzle.givens[it] == 0 }
 
     private fun correctPlayerCells(state: GameState): Int =
-        state.cells.indices.count { i ->
+        state.topology.activeIndices.count { i ->
             val c = state.cells[i]
             !c.isGiven && c.value != 0 && c.value == state.puzzle.solution[i]
         }

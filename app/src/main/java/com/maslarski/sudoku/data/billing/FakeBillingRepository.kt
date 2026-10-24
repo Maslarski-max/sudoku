@@ -1,5 +1,6 @@
 package com.maslarski.sudoku.data.billing
 
+import com.maslarski.sudoku.di.ApplicationScope
 import com.maslarski.sudoku.domain.model.BillingAvailability
 import com.maslarski.sudoku.domain.model.BillingEvent
 import com.maslarski.sudoku.domain.model.ProductId
@@ -7,8 +8,6 @@ import com.maslarski.sudoku.domain.model.StoreProduct
 import com.maslarski.sudoku.domain.repository.BillingRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,9 +23,8 @@ import javax.inject.Singleton
 @Singleton
 class FakeBillingRepository @Inject constructor(
     private val livesRepository: LivesRepository,
+    @ApplicationScope private val scope: CoroutineScope,
 ) : BillingRepository {
-
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override val availability: StateFlow<BillingAvailability> = MutableStateFlow(BillingAvailability.AVAILABLE)
 

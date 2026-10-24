@@ -188,12 +188,16 @@ fun SettingsScreen(
                     Text(stringResource(R.string.settings_rule_enter))
                     Text(stringResource(R.string.settings_rule_notes))
                     Text(stringResource(R.string.settings_rule_candidates))
+                    Text(stringResource(R.string.settings_rule_icon_mode))
                     Text(stringResource(R.string.settings_rule_combo))
                     Text(stringResource(R.string.settings_rule_hint))
                     Text(stringResource(R.string.settings_rule_free_hints))
                     Text(stringResource(R.string.settings_rule_mistakes))
                     Text(stringResource(R.string.settings_rule_lives))
                     Text(stringResource(R.string.settings_rule_countdown))
+                    Text(stringResource(R.string.settings_rule_samurai))
+                    Text(stringResource(R.string.settings_rule_flower))
+                    Text(stringResource(R.string.settings_rule_outside))
                 }
             },
             confirmButton = {

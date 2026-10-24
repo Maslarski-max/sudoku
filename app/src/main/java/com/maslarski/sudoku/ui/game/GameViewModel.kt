@@ -7,25 +7,30 @@ import com.maslarski.sudoku.domain.engine.GameEngine
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.engine.ScoreBreakdown
 import com.maslarski.sudoku.domain.engine.ScoringRules
+import com.maslarski.sudoku.di.ApplicationScope
 import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
-import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.domain.model.Lives
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.GameFeedback
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import com.maslarski.sudoku.domain.repository.SettingsRepository
+import com.maslarski.sudoku.domain.repository.TournamentRepository
+import com.maslarski.sudoku.domain.repository.TrophyRepository
 import com.maslarski.sudoku.domain.time.EpochClock
 import com.maslarski.sudoku.domain.usecase.SubmitScoreUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -44,6 +49,8 @@ sealed interface ScoreSubmission {
     data object Pending : ScoreSubmission
     /** Completed, but did not beat the player's existing best in this category. */
     data object NotPersonalBest : ScoreSubmission
+    data object LocalOnly : ScoreSubmission
+    data object Championship : ScoreSubmission
 }
 
 data class GameUiState(
@@ -59,6 +66,7 @@ data class GameUiState(
     val progressReset: Boolean = false,
     val showReviewPrompt: Boolean = false,
     val showCandidates: Boolean = false,
+    val showCandidatesUpsell: Boolean = false,
 ) {
     val isPaused: Boolean get() = pauseReason != PauseReason.NONE
     val score: ScoreBreakdown? get() = game?.let(ScoringRules::breakdown)
@@ -88,9 +96,12 @@ class GameViewModel @Inject constructor(
     private val feedback: GameFeedback,
     private val settingsRepository: SettingsRepository,
     private val clock: EpochClock,
+    private val tournamentRepository: TournamentRepository,
+    private val trophyRepository: TrophyRepository,
+    @ApplicationScope private val applicationScope: CoroutineScope,
 ) : ViewModel() {
 
-    private val gridSize: GridSize = GridSize.entries.first { it.size == checkNotNull(savedStateHandle.get<Int>("gridSize")) }
+    private val slotId: Int = checkNotNull(savedStateHandle.get<Int>("gridSize"))
 
     private val local = MutableStateFlow(GameUiState())
 
@@ -102,7 +113,7 @@ class GameViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val loaded = gameRepository.load(gridSize)
+            val loaded = gameRepository.loadSlot(slotId)
             if (loaded == null) {
                 local.update { it.copy(missing = true) }
             } else {
@@ -121,7 +132,15 @@ class GameViewModel @Inject constructor(
                 }
                 if (game != loaded) gameRepository.save(game)
                 if (game.isComplete) {
-                    local.update { it.copy(scoreSubmission = ScoreSubmission.Submitted) }
+                    local.update {
+                        it.copy(
+                            scoreSubmission = when {
+                                game.dailyDate != null -> ScoreSubmission.Championship
+                                game.variant != null -> ScoreSubmission.LocalOnly
+                                else -> ScoreSubmission.Submitted
+                            },
+                        )
+                    }
                 } else {
                     startTimer()
                     startOutOfLivesCountdownIfNeeded()
@@ -136,8 +155,10 @@ class GameViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            settingsRepository.settings.collect { settings ->
-                local.update { it.copy(showCandidates = settings.showCandidates) }
+            combine(settingsRepository.settings, livesRepository.lives) { settings, lives ->
+                settings.showCandidates && lives.unlimited
+            }.collect { enabled ->
+                local.update { it.copy(showCandidates = enabled) }
             }
         }
 
@@ -338,10 +359,17 @@ class GameViewModel @Inject constructor(
     fun toggleNotesMode() = local.update { it.copy(notesMode = !it.notesMode) }
 
     fun toggleCandidates() {
+        val lives = local.value.lives ?: return
+        if (!lives.unlimited) {
+            local.update { it.copy(showCandidatesUpsell = true) }
+            return
+        }
         val enabled = !local.value.showCandidates
         local.update { it.copy(showCandidates = enabled) }
         viewModelScope.launch { settingsRepository.setShowCandidates(enabled) }
     }
+
+    fun dismissCandidatesUpsell() = local.update { it.copy(showCandidatesUpsell = false) }
 
     fun enterNumber(value: Int) {
         val state = local.value
@@ -416,16 +444,24 @@ class GameViewModel @Inject constructor(
         completionHandled = true
         feedback.puzzleCompleted()
         timerJob?.cancel()
-        viewModelScope.launch {
+        applicationScope.launch {
             gameRepository.save(state)
+            runCatching { trophyRepository.recordCompletion(state) }
+            launch {
+                runCatching { tournamentRepository.submitCompletion(state) }
+            }
+            val submission = when {
+                state.dailyDate != null -> ScoreSubmission.Championship
+                state.variant != null -> ScoreSubmission.LocalOnly
+                else -> submitScore(state).fold(
+                    onSuccess = { uploaded -> if (uploaded) ScoreSubmission.Submitted else ScoreSubmission.NotPersonalBest },
+                    onFailure = { ScoreSubmission.Pending },
+                )
+            }
+            local.update { it.copy(scoreSubmission = submission) }
             if (runCatching { reviewPrompt.onPuzzleCompleted() }.getOrDefault(false)) {
                 local.update { it.copy(showReviewPrompt = true) }
             }
-            val submission = submitScore(state).fold(
-                onSuccess = { uploaded -> if (uploaded) ScoreSubmission.Submitted else ScoreSubmission.NotPersonalBest },
-                onFailure = { ScoreSubmission.Pending },
-            )
-            local.update { it.copy(scoreSubmission = submission) }
         }
     }
 
@@ -445,7 +481,7 @@ class GameViewModel @Inject constructor(
     /** Removes the finished game so the home screen no longer offers to continue it. */
     fun discardCompletedGame() {
         val game = local.value.game ?: return
-        if (game.isComplete) viewModelScope.launch { gameRepository.delete(game.gridSize) }
+        if (game.isComplete) viewModelScope.launch { gameRepository.deleteSlot(game.slotId) }
     }
 
     override fun onCleared() {

@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -124,6 +126,8 @@ class LeaderboardViewModel @Inject constructor(
 @Composable
 fun LeaderboardScreen(
     onBack: () -> Unit,
+    onOpenTournaments: () -> Unit,
+    onOpenTrophyRoom: () -> Unit,
     viewModel: LeaderboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -135,6 +139,14 @@ fun LeaderboardScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenTournaments) {
+                        Icon(Icons.Default.EmojiEvents, contentDescription = stringResource(R.string.nav_tournaments))
+                    }
+                    IconButton(onClick = onOpenTrophyRoom) {
+                        Icon(Icons.Default.Star, contentDescription = stringResource(R.string.nav_trophy_room))
                     }
                 },
             )

@@ -8,6 +8,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestoreSettings
 import com.google.firebase.firestore.memoryCacheSettings
+import com.google.firebase.functions.FirebaseFunctions
 import com.maslarski.sudoku.BuildConfig
 
 /**
@@ -23,6 +24,7 @@ object FirebaseInitializer {
 
     private const val TAG = "FirebaseInitializer"
     private const val EMULATOR_PROJECT_ID = "sudoku-local"
+    private const val FUNCTIONS_REGION = "europe-west1"
 
     fun initialize(context: Context) {
         if (FirebaseApp.getApps(context).isEmpty()) {
@@ -33,7 +35,7 @@ object FirebaseInitializer {
             val options = FirebaseOptions.Builder()
                 .setProjectId(EMULATOR_PROJECT_ID)
                 .setApplicationId("1:000000000000:android:0000000000000000")
-                .setApiKey("fake-api-key-for-emulator")
+                .setApiKey("A" + "0".repeat(38))
                 .build()
             FirebaseApp.initializeApp(context, options)
         }
@@ -47,6 +49,8 @@ object FirebaseInitializer {
                     setLocalCacheSettings(memoryCacheSettings {})
                 }
             }
+            FirebaseFunctions.getInstance(FUNCTIONS_REGION)
+                .useEmulator(host, BuildConfig.FIREBASE_FUNCTIONS_EMULATOR_PORT)
             Log.i(TAG, "Using Firebase emulators at $host")
         }
     }

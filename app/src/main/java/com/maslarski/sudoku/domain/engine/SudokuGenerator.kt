@@ -2,7 +2,10 @@ package com.maslarski.sudoku.domain.engine
 
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GridSize
+import com.maslarski.sudoku.domain.model.OutsideClues
 import com.maslarski.sudoku.domain.model.Puzzle
+import com.maslarski.sudoku.domain.model.Topology
+import com.maslarski.sudoku.domain.model.Variant
 import kotlin.random.Random
 
 /**
@@ -24,11 +27,46 @@ class SudokuGenerator(
         difficulty: Difficulty,
         seed: Long = Random.nextLong(),
         timeBudgetMillis: Long = defaultBudgetMillis(gridSize),
+        deterministic: Boolean = false,
     ): Puzzle {
         val random = Random(seed)
         val solution = fillGrid(gridSize, random)
-        val givens = carve(gridSize, difficulty, solution, random, timeBudgetMillis)
+        val givens = carve(gridSize, difficulty, solution, random, timeBudgetMillis, deterministic)
         return Puzzle(gridSize, difficulty, givens, solution, seed)
+    }
+
+    fun generateVariant(
+        variant: Variant,
+        difficulty: Difficulty,
+        seed: Long = Random.nextLong(),
+        timeBudgetMillis: Long = VARIANT_TIME_BUDGET_MILLIS,
+    ): Puzzle {
+        val gridSize = GridSize.NINE
+        val topology = Topology.forVariant(variant, gridSize)
+        val random = Random(seed)
+        val deadline = timeSource() + timeBudgetMillis * 1_000_000L
+        val solver = UnitSolver(topology, timeSource = timeSource)
+        val solution = solver.solve(IntArray(topology.cellCount), random, deadline)
+            ?: error("Could not fill ${variant.displayName} topology")
+        val clues = if (variant == Variant.OUTSIDE) generateOutsideClues(solution, random) else null
+        val extraMasks = clues?.exclusionMasks(topology)
+        val givens = carveVariant(
+            topology = topology,
+            difficulty = difficulty,
+            solution = solution,
+            extraMasks = extraMasks,
+            random = random,
+            deadlineNanos = deadline,
+        )
+        return Puzzle(
+            gridSize = gridSize,
+            difficulty = difficulty,
+            givens = givens,
+            solution = solution,
+            seed = seed,
+            variant = variant,
+            outsideClues = clues,
+        )
     }
 
     /** Produces a complete valid grid. */
@@ -82,18 +120,19 @@ class SudokuGenerator(
         solution: IntArray,
         random: Random,
         timeBudgetMillis: Long,
+        deterministic: Boolean,
     ): IntArray {
         val solver = SudokuSolver(gridSize)
         val grid = solution.copyOf()
         val targetEmpty = (gridSize.cellCount * difficulty.emptyFraction).toInt()
-        val deadline = timeSource() + timeBudgetMillis * 1_000_000L
+        val deadline = if (deterministic) Long.MAX_VALUE else timeSource() + timeBudgetMillis * 1_000_000L
         val nodeBudget = nodeBudgetFor(gridSize)
 
         var empty = 0
         val order = grid.indices.shuffled(random)
         for (index in order) {
             if (empty >= targetEmpty) break
-            if (timeSource() > deadline) break
+            if (!deterministic && timeSource() > deadline) break
             val removed = grid[index]
             grid[index] = 0
             // Cheap pre-check: if the removed cell has more than one candidate, the puzzle *might* be non-unique.
@@ -105,6 +144,67 @@ class SudokuGenerator(
         return grid
     }
 
+    private fun carveVariant(
+        topology: Topology,
+        difficulty: Difficulty,
+        solution: IntArray,
+        extraMasks: IntArray?,
+        random: Random,
+        deadlineNanos: Long,
+    ): IntArray {
+        val targetGivens = when (topology.width to difficulty) {
+            21 to Difficulty.EASY -> 190
+            21 to Difficulty.MEDIUM -> 165
+            21 to Difficulty.HARD -> 145
+            15 to Difficulty.EASY -> 105
+            15 to Difficulty.MEDIUM -> 92
+            15 to Difficulty.HARD -> 82
+            else -> when (difficulty) {
+                Difficulty.EASY -> 30
+                Difficulty.MEDIUM -> 25
+                Difficulty.HARD -> 20
+            }
+        }
+        val solver = UnitSolver(topology, extraMasks, timeSource)
+        val grid = solution.copyOf()
+        val order = topology.activeIndices.toList().shuffled(random)
+        var givens = topology.activeIndices.size
+        for (index in order) {
+            if (givens <= targetGivens || timeSource() >= deadlineNanos) break
+            val removed = grid[index]
+            grid[index] = 0
+            val isForced = Integer.bitCount(solver.candidates(grid, index)) == 1
+            val remainsUnique = isForced ||
+                solver.countSolutions(
+                    grid,
+                    limit = 2,
+                    nodeBudget = VARIANT_NODE_BUDGET,
+                    deadlineNanos = deadlineNanos,
+                ).isUnique
+            if (remainsUnique) {
+                givens--
+            } else {
+                grid[index] = removed
+            }
+        }
+        return grid
+    }
+
+    private fun generateOutsideClues(solution: IntArray, random: Random): OutsideClues {
+        fun choose(values: List<Int>): List<Int> =
+            if (random.nextDouble() < OUTSIDE_CLUE_PROBABILITY) {
+                values.distinct().shuffled(random).take(random.nextInt(1, 3))
+            } else {
+                emptyList()
+            }
+
+        val left = (0 until 9).map { row -> choose((0 until 3).map { col -> solution[row * 9 + col] }) }
+        val right = (0 until 9).map { row -> choose((0 until 3).map { offset -> solution[row * 9 + 8 - offset] }) }
+        val top = (0 until 9).map { col -> choose((0 until 3).map { row -> solution[row * 9 + col] }) }
+        val bottom = (0 until 9).map { col -> choose((0 until 3).map { offset -> solution[(8 - offset) * 9 + col] }) }
+        return OutsideClues(left, right, top, bottom)
+    }
+
     private fun nodeBudgetFor(gridSize: GridSize): Long = when (gridSize) {
         GridSize.NINE -> 200_000L
         GridSize.TWELVE -> 300_000L
@@ -113,6 +213,10 @@ class SudokuGenerator(
     }
 
     companion object {
+        const val VARIANT_TIME_BUDGET_MILLIS = 8_000L
+        private const val VARIANT_NODE_BUDGET = 300_000L
+        private const val OUTSIDE_CLUE_PROBABILITY = 0.6
+
         fun defaultBudgetMillis(gridSize: GridSize): Long = when (gridSize) {
             GridSize.NINE -> 2_000L
             GridSize.TWELVE -> 4_000L

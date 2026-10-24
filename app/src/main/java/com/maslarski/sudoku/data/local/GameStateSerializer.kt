@@ -5,7 +5,9 @@ import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Move
+import com.maslarski.sudoku.domain.model.OutsideClues
 import com.maslarski.sudoku.domain.model.Puzzle
+import com.maslarski.sudoku.domain.model.Variant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -38,6 +40,25 @@ class GameStateSerializer @Inject constructor() {
     }
 
     @Serializable
+    private data class OutsideCluesDto(
+        val left: List<List<Int>> = emptyList(),
+        val right: List<List<Int>> = emptyList(),
+        val top: List<List<Int>> = emptyList(),
+        val bottom: List<List<Int>> = emptyList(),
+    ) {
+        fun toOutsideClues() = OutsideClues(left, right, top, bottom)
+
+        companion object {
+            fun from(clues: OutsideClues) = OutsideCluesDto(
+                left = clues.rowsFromLeft,
+                right = clues.rowsFromRight,
+                top = clues.columnsFromTop,
+                bottom = clues.columnsFromBottom,
+            )
+        }
+    }
+
+    @Serializable
     private data class Snapshot(
         val gridSize: Int,
         val difficulty: String,
@@ -60,6 +81,10 @@ class GameStateSerializer @Inject constructor() {
         val comboStreak: Int = 0,
         val lastCorrectElapsedMillis: Long? = null,
         val countedCells: List<Int> = emptyList(),
+        val variant: String? = null,
+        val outsideClues: OutsideCluesDto? = null,
+        val iconMode: Boolean = false,
+        val dailyDate: String? = null,
     ) {
         fun toState(): GameState = GameState(
             puzzle = Puzzle(
@@ -68,6 +93,8 @@ class GameStateSerializer @Inject constructor() {
                 givens = givens.toIntArray(),
                 solution = solution.toIntArray(),
                 seed = seed,
+                variant = variant?.let(Variant::valueOf),
+                outsideClues = outsideClues?.toOutsideClues(),
             ),
             cells = cells.map { it.toCell() },
             undoStack = undo.map { it.toMove() },
@@ -85,6 +112,8 @@ class GameStateSerializer @Inject constructor() {
             comboStreak = comboStreak,
             lastCorrectElapsedMillis = lastCorrectElapsedMillis,
             countedCells = countedCells.toSet(),
+            iconMode = iconMode && dailyDate == null && variant == null,
+            dailyDate = dailyDate,
         )
 
         companion object {
@@ -110,6 +139,10 @@ class GameStateSerializer @Inject constructor() {
                 comboStreak = s.comboStreak,
                 lastCorrectElapsedMillis = s.lastCorrectElapsedMillis,
                 countedCells = s.countedCells.sorted(),
+                variant = s.puzzle.variant?.name,
+                outsideClues = s.puzzle.outsideClues?.let(OutsideCluesDto::from),
+                iconMode = s.iconMode,
+                dailyDate = s.dailyDate,
             )
         }
     }

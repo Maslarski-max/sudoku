@@ -27,6 +27,7 @@ class DataStoreSettingsRepository @Inject constructor(
                 AppTheme.entries.firstOrNull { it.name == saved }
             } ?: AppTheme.DEFAULT,
             darkMode = preferences[KEY_DARK_MODE] ?: true,
+            iconMode = preferences[KEY_ICON_MODE] ?: false,
         )
     }
 
@@ -50,11 +51,16 @@ class DataStoreSettingsRepository @Inject constructor(
         dataStore.edit { it[KEY_DARK_MODE] = darkMode }
     }
 
+    override suspend fun setIconMode(iconMode: Boolean) {
+        dataStore.edit { it[KEY_ICON_MODE] = iconMode }
+    }
+
     private companion object {
         val KEY_SOUND = booleanPreferencesKey("settings_sound")
         val KEY_VIBRATION = booleanPreferencesKey("settings_vibration")
         val KEY_SHOW_CANDIDATES = booleanPreferencesKey("settings_show_candidates")
         val KEY_THEME = stringPreferencesKey("settings_theme")
         val KEY_DARK_MODE = booleanPreferencesKey("settings_dark_mode")
+        val KEY_ICON_MODE = booleanPreferencesKey("settings_icon_mode")
     }
 }

@@ -61,6 +61,7 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
+firebase-functions = { group = "com.google.firebase", name = "firebase-functions" }
 play-billing = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billing" }
 play-review = { group = "com.google.android.play", name = "review-ktx", version.ref = "playReview" }
 

@@ -48,6 +48,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /arena/{period}/scores/{uid} {
+      allow read: if isSignedIn() && period.matches('^\\d{4}-\\d{2}$');
+      allow write: if false;
+    }
+
+    match /championship/{period}/scores/{uid} {
+      allow read: if isSignedIn() && period.matches('^\\d{4}$');
+      allow write: if false;
+    }
+
+    match /players/{document=**} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

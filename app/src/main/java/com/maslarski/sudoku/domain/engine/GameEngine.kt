@@ -19,6 +19,7 @@ class GameEngine {
     data class EntryResult(val state: GameState, val wasMistake: Boolean, val lostLife: Boolean = false)
 
     fun enterValue(state: GameState, index: Int, value: Int): EntryResult {
+        if (!state.topology.active[index]) return EntryResult(state, wasMistake = false)
         val cell = state.cells[index]
         if (cell.isGiven || state.isComplete) return EntryResult(state, wasMistake = false)
         if (cell.value == value) return EntryResult(state, wasMistake = false)
@@ -63,6 +64,7 @@ class GameEngine {
     }
 
     fun toggleNote(state: GameState, index: Int, value: Int): GameState {
+        if (!state.topology.active[index]) return state
         val cell = state.cells[index]
         if (cell.isGiven || state.isComplete) return state
         val base = if (cell.value != 0) cell.copy(value = 0, isError = false, combo = false) else cell
@@ -70,6 +72,7 @@ class GameEngine {
     }
 
     fun erase(state: GameState, index: Int): GameState {
+        if (!state.topology.active[index]) return state
         val cell = state.cells[index]
         if (cell.isGiven || state.isComplete || (cell.value == 0 && cell.notes == 0)) return state
         return applyMove(state, Move(index, cell, Cell()))
@@ -100,6 +103,7 @@ class GameEngine {
 
     fun applyHint(state: GameState, hint: Hint): GameState {
         if (hint is Hint.None || state.isComplete) return state
+        if (!state.topology.active[hint.index]) return state
         val cell = state.cells[hint.index]
         val after = cell.copy(value = hint.value, notes = 0, isError = false, combo = false)
         val next = applyMove(state, Move(hint.index, cell, after))
@@ -129,7 +133,7 @@ class GameEngine {
         val bit = 1 shl (value - 1)
         val cells = state.cells.toMutableList()
         var changed = false
-        for (peer in HintEngine.peersOf(index, state.gridSize)) {
+        for (peer in state.topology.peers(index)) {
             val c = cells[peer]
             if (c.value == 0 && c.notes and bit != 0) {
                 cells[peer] = c.copy(notes = c.notes and bit.inv())
@@ -140,7 +144,7 @@ class GameEngine {
     }
 
     private fun finalizeIfSolved(state: GameState): GameState {
-        val solved = state.cells.indices.all { state.cells[it].value == state.puzzle.solution[it] }
+        val solved = state.topology.activeIndices.all { state.cells[it].value == state.puzzle.solution[it] }
         return if (solved) state.copy(isComplete = true, redoStack = emptyList()) else state
     }
 }

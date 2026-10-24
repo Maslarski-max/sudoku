@@ -3,10 +3,12 @@ package com.maslarski.sudoku.domain.usecase
 import com.maslarski.sudoku.domain.engine.ScoringRules
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.DailyChallenge
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.LeaderboardCategory
 import com.maslarski.sudoku.domain.model.Score
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.AuthRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
@@ -31,9 +33,28 @@ class StartNewGameUseCase @Inject constructor(
         difficulty: Difficulty,
         beforeSave: suspend () -> Boolean = { true },
         onSaveFailed: suspend () -> Unit = {},
+        variant: Variant? = null,
+        iconMode: Boolean = false,
+        dailyDate: String? = null,
     ): GameState? {
-        val puzzle = withContext(defaultDispatcher) { generator.generate(gridSize, difficulty) }
-        val state = GameState.fromPuzzle(puzzle, nowEpochMillis = System.currentTimeMillis())
+        val puzzle = withContext(defaultDispatcher) {
+            if (dailyDate != null) {
+                generator.generate(
+                    GridSize.NINE,
+                    Difficulty.MEDIUM,
+                    seed = DailyChallenge.seed(dailyDate).toLong(),
+                    deterministic = true,
+                )
+            } else if (variant == null) generator.generate(gridSize, difficulty)
+            else generator.generateVariant(variant, difficulty)
+        }
+        val state = GameState.fromPuzzle(
+            puzzle,
+            nowEpochMillis = System.currentTimeMillis(),
+            iconMode = dailyDate == null && iconMode && variant == null &&
+                (gridSize == GridSize.NINE || gridSize == GridSize.TWELVE),
+            dailyDate = dailyDate,
+        )
         return withContext(NonCancellable) {
             if (!beforeSave()) return@withContext null
             try {

@@ -6,15 +6,21 @@ import com.maslarski.sudoku.domain.engine.GameEngine
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.DailyChallenge
 import com.maslarski.sudoku.domain.model.Cell
 import com.maslarski.sudoku.domain.model.AppSettings
 import com.maslarski.sudoku.domain.model.AppTheme
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.model.LeaderboardCategory
 import com.maslarski.sudoku.domain.model.LeaderboardEntry
 import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.model.Score
+import com.maslarski.sudoku.domain.model.TournamentEntry
+import com.maslarski.sudoku.domain.model.TournamentBoard
+import com.maslarski.sudoku.domain.model.TournamentSnapshot
+import com.maslarski.sudoku.domain.model.Trophy
 import com.maslarski.sudoku.domain.repository.AuthRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.GameFeedback
@@ -23,17 +29,22 @@ import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
 import com.maslarski.sudoku.domain.repository.SettingsRepository
+import com.maslarski.sudoku.domain.repository.TournamentRepository
+import com.maslarski.sudoku.domain.repository.TrophyRepository
 import com.maslarski.sudoku.domain.time.EpochClock
 import com.maslarski.sudoku.domain.usecase.SubmitScoreUseCase
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -53,7 +64,10 @@ class GameViewModelTest {
     private lateinit var initial: GameState
     private val games = FakeGameRepository()
     private val lives = FakeLivesRepository()
-    private val leaderboard = FakeLeaderboardRepository()
+    private val completionEvents = mutableListOf<String>()
+    private val leaderboard = FakeLeaderboardRepository(completionEvents)
+    private val tournaments = FakeTournamentRepository(completionEvents)
+    private val trophies = FakeTrophyRepository(completionEvents)
     private val reviewPrompt = FakeReviewPromptRepository()
     private val feedback = RecordingGameFeedback()
     private val settings = FakeSettingsRepository()
@@ -62,6 +76,7 @@ class GameViewModelTest {
         1_700_000_000_000L + dispatcher.scheduler.currentTime + clockOffsetMillis
     }
     private val store = ViewModelStore()
+    private lateinit var applicationScope: CoroutineScope
 
     @Before
     fun setUp() {
@@ -76,6 +91,7 @@ class GameViewModelTest {
 
     /** Clears the ViewModel before runTest idles the scheduler, otherwise its timer loop would never let it idle. */
     private fun vmTest(block: suspend TestScope.() -> Unit) = runTest(dispatcher) {
+        applicationScope = this
         try {
             block()
         } finally {
@@ -85,8 +101,9 @@ class GameViewModelTest {
 
     private fun viewModel(
         submitScore: SubmitScoreUseCase = SubmitScoreUseCase(FakeAuthRepository(), leaderboard),
+        slotId: Int = GridSize.NINE.size,
     ) = GameViewModel(
-        savedStateHandle = SavedStateHandle(mapOf("gridSize" to 9)),
+        savedStateHandle = SavedStateHandle(mapOf("gridSize" to slotId)),
         gameRepository = games,
         livesRepository = lives,
         engine = GameEngine(),
@@ -96,6 +113,9 @@ class GameViewModelTest {
         feedback = feedback,
         settingsRepository = settings,
         clock = clock,
+        tournamentRepository = tournaments,
+        trophyRepository = trophies,
+        applicationScope = applicationScope,
     ).also { store.put("game", it) }
 
     /** The timer ticks forever, so advance a bounded amount of virtual time instead of idling. */
@@ -519,7 +539,7 @@ class GameViewModelTest {
     }
 
     @Test
-    fun `candidates toggle persists the setting and updates ui state`() = vmTest {
+    fun `non-premium candidates toggle opens upsell without persisting`() = vmTest {
         val vm = viewModel()
         settle()
         assertFalse(vm.uiState.value.showCandidates)
@@ -527,8 +547,62 @@ class GameViewModelTest {
         vm.toggleCandidates()
         settle()
 
+        assertFalse(vm.uiState.value.showCandidates)
+        assertTrue(vm.uiState.value.showCandidatesUpsell)
+        assertFalse(settings.state.value.showCandidates)
+        assertEquals(0, settings.candidateWrites)
+    }
+
+    @Test
+    fun `candidates toggle is ignored while lives are loading`() = vmTest {
+        lives.deferInitialEmission = true
+        val vm = viewModel()
+        dispatcher.scheduler.runCurrent()
+
+        vm.toggleCandidates()
+
+        assertFalse(vm.uiState.value.showCandidatesUpsell)
+        assertFalse(vm.uiState.value.showCandidates)
+        assertEquals(0, settings.candidateWrites)
+    }
+
+    @Test
+    fun `premium candidates toggle persists and enables display`() = vmTest {
+        lives.state.value = lives.state.value.copy(unlimited = true)
+        val vm = viewModel()
+        settle()
+
+        vm.toggleCandidates()
+        settle()
+
         assertTrue(vm.uiState.value.showCandidates)
         assertTrue(settings.state.value.showCandidates)
+        assertFalse(vm.uiState.value.showCandidatesUpsell)
+        assertEquals(1, settings.candidateWrites)
+    }
+
+    @Test
+    fun `saved candidates preference is hidden without premium`() = vmTest {
+        settings.state.value = settings.state.value.copy(showCandidates = true)
+        val vm = viewModel()
+        settle()
+
+        assertFalse(vm.uiState.value.showCandidates)
+        assertFalse(vm.uiState.value.showCandidatesUpsell)
+    }
+
+    @Test
+    fun `dismissing candidates upsell clears the flag`() = vmTest {
+        val vm = viewModel()
+        settle()
+        vm.toggleCandidates()
+        settle()
+
+        assertTrue(vm.uiState.value.showCandidatesUpsell)
+        vm.dismissCandidatesUpsell()
+        settle()
+
+        assertFalse(vm.uiState.value.showCandidatesUpsell)
     }
 
     @Test
@@ -559,6 +633,55 @@ class GameViewModelTest {
         assertTrue(submitted.timeMillis >= 1L)
         assertEquals(GridSize.NINE, submitted.gridSize)
         assertEquals(Difficulty.EASY, submitted.difficulty)
+        assertEquals(1, tournaments.completions.size)
+        assertNull(tournaments.completions.single().variant)
+        assertNull(tournaments.completions.single().dailyDate)
+    }
+
+    @Test
+    fun `classic submit survives view model clearing while tournament write is suspended`() = vmTest {
+        val submitStarted = CompletableDeferred<Unit>()
+        val submitGate = CompletableDeferred<Unit>()
+        tournaments.submitStarted = submitStarted
+        tournaments.submitGate = submitGate
+
+        val vm = viewModel()
+        settle()
+        completeBoard(vm)
+
+        assertTrue(submitStarted.isCompleted)
+        assertEquals(1, leaderboard.submitted.size)
+
+        store.clear()
+        submitGate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1, leaderboard.submitted.size)
+        assertEquals(5, reviewPrompt.completedCount)
+    }
+
+    @Test
+    fun `tournament record starts while classic submit is suspended`() = vmTest {
+        val submitStarted = CompletableDeferred<Unit>()
+        val submitGate = CompletableDeferred<Unit>()
+        leaderboard.submitStarted = submitStarted
+        leaderboard.submitGate = submitGate
+        val completionStarted = CompletableDeferred<Unit>()
+        tournaments.submitStarted = completionStarted
+
+        val vm = viewModel()
+        settle()
+        completeBoard(vm)
+
+        assertTrue(submitStarted.isCompleted)
+        assertFalse(submitGate.isCompleted)
+        assertTrue(completionStarted.isCompleted)
+        assertEquals(1, leaderboard.submitted.size)
+
+        submitGate.complete(Unit)
+        settle()
+
+        assertEquals(ScoreSubmission.Submitted, vm.uiState.value.scoreSubmission)
     }
 
     @Test
@@ -613,6 +736,69 @@ class GameViewModelTest {
         assertEquals(ScoreSubmission.NotPersonalBest, vm.uiState.value.scoreSubmission)
     }
 
+    @Test
+    fun `variation completion remains local and does not submit a leaderboard score`() = vmTest {
+        val index = initial.cells.indexOfFirst { it.isEmpty }
+        val givens = initial.puzzle.solution.copyOf().also { it[index] = 0 }
+        val puzzle = initial.puzzle.copy(givens = givens, variant = Variant.OUTSIDE)
+        games.variantSaved[Variant.OUTSIDE.slotId] = GameState.fromPuzzle(puzzle, nowEpochMillis = 0L)
+        val vm = viewModel(slotId = Variant.OUTSIDE.slotId)
+        settle()
+
+        vm.selectCell(index)
+        vm.enterNumber(puzzle.solution[index])
+        settle()
+
+        assertTrue(vm.uiState.value.game?.isComplete == true)
+        assertEquals(ScoreSubmission.LocalOnly, vm.uiState.value.scoreSubmission)
+        assertTrue(leaderboard.submitted.isEmpty())
+        assertEquals(1, tournaments.completions.size)
+        assertEquals(Variant.OUTSIDE, tournaments.completions.single().variant)
+    }
+
+    @Test
+    fun `samurai completion routes to arena and championship only`() = vmTest {
+        val puzzle = SudokuGenerator().generateVariant(Variant.SAMURAI, Difficulty.EASY, seed = 19L)
+        val emptyIndex = puzzle.givens.indexOfFirst { it == 0 }
+        val givens = puzzle.solution.copyOf().also { it[emptyIndex] = 0 }
+        val game = GameState.fromPuzzle(puzzle.copy(givens = givens), nowEpochMillis = 0L)
+        games.variantSaved[Variant.SAMURAI.slotId] = game
+        val vm = viewModel(slotId = Variant.SAMURAI.slotId)
+        settle()
+
+        vm.selectCell(emptyIndex)
+        vm.enterNumber(puzzle.solution[emptyIndex])
+        settle()
+
+        assertTrue(vm.uiState.value.game?.isComplete == true)
+        assertTrue(leaderboard.submitted.isEmpty())
+        assertEquals(1, tournaments.completions.size)
+        assertEquals(Variant.SAMURAI, tournaments.completions.single().variant)
+    }
+
+    @Test
+    fun `daily completion stamps its date and routes only to championship`() = vmTest {
+        val emptyIndex = initial.puzzle.givens.indexOfFirst { it == 0 }
+        val givens = initial.puzzle.solution.copyOf().also { it[emptyIndex] = 0 }
+        val puzzle = initial.puzzle.copy(givens = givens)
+        val date = "2024-02-29"
+        games.variantSaved[DailyChallenge.SLOT_ID] =
+            GameState.fromPuzzle(puzzle, nowEpochMillis = 0L, dailyDate = date)
+        val vm = viewModel(slotId = DailyChallenge.SLOT_ID)
+        settle()
+
+        vm.selectCell(emptyIndex)
+        vm.enterNumber(puzzle.solution[emptyIndex])
+        settle()
+
+        assertTrue(vm.uiState.value.game?.isComplete == true)
+        assertEquals(ScoreSubmission.Championship, vm.uiState.value.scoreSubmission)
+        assertTrue(leaderboard.submitted.isEmpty())
+        assertEquals(date, trophies.completions.single().dailyDate)
+        assertEquals(1, tournaments.completions.size)
+        assertEquals(date, tournaments.completions.single().dailyDate)
+    }
+
     private fun completeBoard(vm: GameViewModel) {
         initial.cells.forEachIndexed { index, cell ->
             if (cell.isEmpty) {
@@ -626,20 +812,35 @@ class GameViewModelTest {
 
 private class FakeGameRepository : GameRepository {
     val saved = mutableMapOf<GridSize, GameState>()
+    val variantSaved = mutableMapOf<Int, GameState>()
     var loadGate: CompletableDeferred<Unit>? = null
     override fun observeSavedGames(): Flow<List<SavedGameSummary>> = flowOf(emptyList())
     override suspend fun load(gridSize: GridSize): GameState? {
         loadGate?.await()
         return saved[gridSize]
     }
-    override suspend fun save(state: GameState) { saved[state.gridSize] = state }
+    override suspend fun loadSlot(slotId: Int): GameState? {
+        loadGate?.await()
+        return if (slotId == DailyChallenge.SLOT_ID || Variant.fromSlotId(slotId) != null) variantSaved[slotId]
+        else GridSize.entries.firstOrNull { it.size == slotId }?.let { saved[it] }
+    }
+    override suspend fun save(state: GameState) {
+        if (state.dailyDate != null || state.variant != null) variantSaved[state.slotId] = state
+        else saved[state.gridSize] = state
+    }
     override suspend fun delete(gridSize: GridSize) { saved.remove(gridSize) }
+    override suspend fun deleteSlot(slotId: Int) {
+        if (slotId == DailyChallenge.SLOT_ID || Variant.fromSlotId(slotId) != null) variantSaved.remove(slotId)
+        else GridSize.entries.firstOrNull { it.size == slotId }?.let(saved::remove)
+    }
 }
 
 private class FakeLivesRepository : LivesRepository {
     val state = MutableStateFlow(Lives(count = Lives.STARTING_LIVES, unlimited = false))
+    var deferInitialEmission = false
+    private val delayedLives = MutableSharedFlow<Lives>(extraBufferCapacity = 1)
     var consumed = 0
-    override val lives: Flow<Lives> get() = state
+    override val lives: Flow<Lives> get() = if (deferInitialEmission) delayedLives else state
     override suspend fun consumeLife(): Boolean {
         val current = state.value
         if (current.unlimited) return true
@@ -666,6 +867,7 @@ private class FakeReviewPromptRepository(var completedCount: Int = 4) : ReviewPr
 
 private class FakeSettingsRepository : SettingsRepository {
     val state = MutableStateFlow(AppSettings())
+    var candidateWrites = 0
     override val settings: Flow<AppSettings> get() = state
     override suspend fun setSoundEnabled(enabled: Boolean) {
         state.value = state.value.copy(soundEnabled = enabled)
@@ -674,6 +876,7 @@ private class FakeSettingsRepository : SettingsRepository {
         state.value = state.value.copy(vibrationEnabled = enabled)
     }
     override suspend fun setShowCandidates(enabled: Boolean) {
+        candidateWrites++
         state.value = state.value.copy(showCandidates = enabled)
     }
     override suspend fun setTheme(theme: AppTheme) {
@@ -681,6 +884,9 @@ private class FakeSettingsRepository : SettingsRepository {
     }
     override suspend fun setDarkMode(darkMode: Boolean) {
         state.value = state.value.copy(darkMode = darkMode)
+    }
+    override suspend fun setIconMode(iconMode: Boolean) {
+        state.value = state.value.copy(iconMode = iconMode)
     }
 }
 
@@ -701,14 +907,51 @@ private class FailingAuthRepository : AuthRepository {
     override suspend fun ensureSignedIn(): String = throw IOException("auth unreachable")
 }
 
-private class FakeLeaderboardRepository : LeaderboardRepository {
+private class FakeLeaderboardRepository(
+    private val completionEvents: MutableList<String>,
+) : LeaderboardRepository {
     val submitted = mutableListOf<Score>()
     var result: Result<Boolean> = Result.success(true)
+    var submitStarted: CompletableDeferred<Unit>? = null
+    var submitGate: CompletableDeferred<Unit>? = null
     override fun observeTop(category: LeaderboardCategory, limit: Int): Flow<List<LeaderboardEntry>> = flowOf(emptyList())
     override suspend fun refresh(category: LeaderboardCategory, limit: Int): Result<Unit> = Result.success(Unit)
     override suspend fun personalBest(category: LeaderboardCategory): Score? = null
     override suspend fun submit(score: Score): Result<Boolean> {
+        completionEvents += "classic"
         submitted += score
+        submitStarted?.complete(Unit)
+        submitGate?.await()
         return result
     }
+}
+
+private class FakeTournamentRepository(
+    private val completionEvents: MutableList<String>,
+) : TournamentRepository {
+    val completions = mutableListOf<GameState>()
+    var submitStarted: CompletableDeferred<Unit>? = null
+    var submitGate: CompletableDeferred<Unit>? = null
+    override suspend fun submitCompletion(state: GameState): Result<Unit> {
+        completionEvents += "tournament"
+        completions += state
+        submitStarted?.complete(Unit)
+        submitGate?.await()
+        return Result.success(Unit)
+    }
+    override suspend fun flushPending() = Unit
+    override suspend fun load(board: TournamentBoard, period: String, limit: Int, serverOnly: Boolean) =
+        Result.success(TournamentSnapshot(board, period, emptyList<TournamentEntry>(), null))
+}
+
+private class FakeTrophyRepository(
+    private val completionEvents: MutableList<String>,
+) : TrophyRepository {
+    val completions = mutableListOf<GameState>()
+    override val trophies: Flow<List<Trophy>> = flowOf(emptyList())
+    override suspend fun recordCompletion(state: GameState) {
+        completionEvents += "trophy"
+        completions += state
+    }
+    override suspend fun refreshPeriodAwards() = Unit
 }
