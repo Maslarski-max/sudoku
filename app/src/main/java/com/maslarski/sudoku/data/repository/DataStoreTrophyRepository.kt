@@ -89,24 +89,49 @@ class DataStoreTrophyRepository @Inject constructor(
     override suspend fun refreshPeriodAwards() {
         val nowMonth = YearMonth.from(DailyChallenge.dateAt(clock.now()))
         val prior = dataStore.data.first()
-        val checkedMonth = prior[CHECKED_ARENA_MONTH]
-        if (checkedMonth != nowMonth.toString()) {
-            val period = nowMonth.minusMonths(1).toString()
+        val checkedMonth = prior[CHECKED_ARENA_PERIOD]
+            ?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
+            ?: prior[LEGACY_CHECKED_ARENA_MONTH]
+                ?.let { runCatching { YearMonth.parse(it).minusMonths(1) }.getOrNull() }
+        val firstArenaMonth = maxOf(
+            nowMonth.minusMonths(12),
+            checkedMonth?.plusMonths(1) ?: nowMonth.minusMonths(12),
+        )
+        var arenaMonth = firstArenaMonth
+        val lastArenaMonth = nowMonth.minusMonths(1)
+        while (!arenaMonth.isAfter(lastArenaMonth)) {
+            val period = arenaMonth.toString()
             val result = tournamentRepository.load(TournamentBoard.ARENA, period, serverOnly = true)
-            if (result.isSuccess) {
-                result.getOrNull()?.let { persistPlacement(TournamentBoard.ARENA, it) }
-                dataStore.edit { it[CHECKED_ARENA_MONTH] = nowMonth.toString() }
+            if (result.isFailure) break
+            result.getOrNull()?.let { persistPlacement(TournamentBoard.ARENA, it) }
+            dataStore.edit {
+                it[CHECKED_ARENA_PERIOD] = period
+                it.remove(LEGACY_CHECKED_ARENA_MONTH)
             }
+            arenaMonth = arenaMonth.plusMonths(1)
         }
-        val year = nowMonth.year.toString()
-        val checkedYear = dataStore.data.first()[CHECKED_CHAMPIONSHIP_YEAR]
-        if (checkedYear != year) {
-            val period = (nowMonth.year - 1).toString()
+        val checkedYearPreferences = dataStore.data.first()
+        val checkedYear = checkedYearPreferences[CHECKED_CHAMPIONSHIP_PERIOD]
+            ?.toIntOrNull()
+            ?: checkedYearPreferences[LEGACY_CHECKED_CHAMPIONSHIP_YEAR]
+                ?.toIntOrNull()
+                ?.minus(1)
+        val firstChampionshipYear = maxOf(
+            nowMonth.year - 3,
+            checkedYear?.plus(1) ?: nowMonth.year - 3,
+        )
+        var championshipYear = firstChampionshipYear
+        val lastChampionshipYear = nowMonth.year - 1
+        while (championshipYear <= lastChampionshipYear) {
+            val period = championshipYear.toString()
             val result = tournamentRepository.load(TournamentBoard.CHAMPIONSHIP, period, serverOnly = true)
-            if (result.isSuccess) {
-                result.getOrNull()?.let { persistPlacement(TournamentBoard.CHAMPIONSHIP, it) }
-                dataStore.edit { it[CHECKED_CHAMPIONSHIP_YEAR] = year }
+            if (result.isFailure) break
+            result.getOrNull()?.let { persistPlacement(TournamentBoard.CHAMPIONSHIP, it) }
+            dataStore.edit {
+                it[CHECKED_CHAMPIONSHIP_PERIOD] = period
+                it.remove(LEGACY_CHECKED_CHAMPIONSHIP_YEAR)
             }
+            championshipYear++
         }
     }
 
@@ -255,7 +280,9 @@ class DataStoreTrophyRepository @Inject constructor(
         val MILESTONES = stringSetPreferencesKey("trophy_milestones")
         val LEGACY_TOURNAMENT_AWARDS = stringSetPreferencesKey("trophy_tournament_awards")
         val TOURNAMENT_AWARDS = stringPreferencesKey("trophy_tournament_awards_v2")
-        val CHECKED_ARENA_MONTH = stringPreferencesKey("trophy_checked_arena_month")
-        val CHECKED_CHAMPIONSHIP_YEAR = stringPreferencesKey("trophy_checked_championship_year")
+        val CHECKED_ARENA_PERIOD = stringPreferencesKey("trophy_checked_arena_period")
+        val CHECKED_CHAMPIONSHIP_PERIOD = stringPreferencesKey("trophy_checked_championship_period")
+        val LEGACY_CHECKED_ARENA_MONTH = stringPreferencesKey("trophy_checked_arena_month")
+        val LEGACY_CHECKED_CHAMPIONSHIP_YEAR = stringPreferencesKey("trophy_checked_championship_year")
     }
 }

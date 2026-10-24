@@ -104,6 +104,7 @@ fun GameScreen(
     onBack: () -> Unit,
     onOpenStore: () -> Unit,
     onOpenLeaderboard: (GridSize, Difficulty) -> Unit,
+    onOpenTournaments: () -> Unit,
     onNewGame: () -> Unit,
     viewModel: GameViewModel = hiltViewModel(),
 ) {
@@ -248,7 +249,10 @@ fun GameScreen(
             score = ScoringRules.breakdown(game),
             submission = state.scoreSubmission,
             onNewGame = { viewModel.discardCompletedGame(); onNewGame() },
-            onLeaderboard = { onOpenLeaderboard(game.gridSize, game.difficulty) },
+            onLeaderboard = {
+                if (game.dailyDate != null) onOpenTournaments()
+                else onOpenLeaderboard(game.gridSize, game.difficulty)
+            },
             onHome = { viewModel.discardCompletedGame(); onBack() },
         )
         state.pauseReason == PauseReason.OUT_OF_LIVES -> OutOfLivesDialog(

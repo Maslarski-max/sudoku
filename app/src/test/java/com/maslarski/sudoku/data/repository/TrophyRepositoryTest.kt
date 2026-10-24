@@ -3,6 +3,7 @@ package com.maslarski.sudoku.data.repository
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.model.DailyChallenge
 import com.maslarski.sudoku.domain.model.Difficulty
@@ -57,6 +58,12 @@ class TrophyRepositoryTest {
     @Test
     fun `stores two distinct tournament awards and checks previous year outside January`() = runTest {
         val store = MemoryPreferencesStore()
+        store.updateData { preferences ->
+            preferences.toMutablePreferences().apply {
+                this[stringPreferencesKey("trophy_checked_arena_period")] = "2024-01"
+                this[stringPreferencesKey("trophy_checked_championship_period")] = "2022"
+            }
+        }
         val arena = TournamentSnapshot(
             TournamentBoard.ARENA,
             "2024-02",
@@ -94,6 +101,58 @@ class TrophyRepositoryTest {
     }
 
     @Test
+    fun `backfills skipped months and at most three previous years`() = runTest {
+        val store = MemoryPreferencesStore()
+        store.updateData { preferences ->
+            preferences.toMutablePreferences().apply {
+                this[stringPreferencesKey("trophy_checked_arena_period")] = "2024-01"
+                this[stringPreferencesKey("trophy_checked_championship_period")] = "2018"
+            }
+        }
+        val arenaFebruary = TournamentSnapshot(
+            TournamentBoard.ARENA,
+            "2024-02",
+            emptyList(),
+            TournamentEntry(1, "player", "Player", 1200, 3, true),
+        )
+        val arenaMarch = TournamentSnapshot(
+            TournamentBoard.ARENA,
+            "2024-03",
+            emptyList(),
+            TournamentEntry(2, "player", "Player", 1000, 2, true),
+        )
+        val tournaments = AwardTournamentRepository(
+            mapOf(
+                (TournamentBoard.ARENA to "2024-02") to Result.success(arenaFebruary),
+                (TournamentBoard.ARENA to "2024-03") to Result.success(arenaMarch),
+            ),
+        )
+        val repository = DataStoreTrophyRepository(
+            store,
+            FakeDailyRepository(emptySet()),
+            tournaments,
+            FakeLivesRepository(),
+            EpochClock { Instant.parse("2024-04-01T12:00:00Z").toEpochMilli() },
+        )
+
+        repository.refreshPeriodAwards()
+        repository.refreshPeriodAwards()
+
+        assertEquals(
+            listOf("2024-02", "2024-03"),
+            tournaments.requests.filter { it.first == TournamentBoard.ARENA }.map { it.second },
+        )
+        assertEquals(
+            listOf("2021", "2022", "2023"),
+            tournaments.requests.filter { it.first == TournamentBoard.CHAMPIONSHIP }.map { it.second },
+        )
+        val awards = repository.trophies.first().filter { it.category == TrophyCategory.TOURNAMENT }
+        assertTrue(awards.any { it.id == "tournament_arena_2024-02_1" })
+        assertTrue(awards.any { it.id == "tournament_arena_2024-03_2" })
+        assertTrue(tournaments.serverOnlyRequests.all { it })
+    }
+
+    @Test
     fun `failed server podium load retries until success and marks the period checked`() = runTest {
         val arenaPeriod = "2024-02"
         val arenaKey = TournamentBoard.ARENA to arenaPeriod
@@ -103,10 +162,17 @@ class TrophyRepositoryTest {
             emptyList(),
             TournamentEntry(1, "player", "Player", 1200, 3, true),
         )
+        val store = MemoryPreferencesStore()
+        store.updateData { preferences ->
+            preferences.toMutablePreferences().apply {
+                this[stringPreferencesKey("trophy_checked_arena_period")] = "2024-01"
+                this[stringPreferencesKey("trophy_checked_championship_period")] = "2023"
+            }
+        }
         val tournaments = AwardTournamentRepository(emptyMap())
         tournaments.setResponse(arenaKey, Result.failure(IOException("offline")))
         val repository = DataStoreTrophyRepository(
-            MemoryPreferencesStore(),
+            store,
             FakeDailyRepository(emptySet()),
             tournaments,
             FakeLivesRepository(),

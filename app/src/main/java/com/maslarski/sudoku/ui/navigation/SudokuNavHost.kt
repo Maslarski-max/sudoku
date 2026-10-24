@@ -8,6 +8,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GridSize
+import com.maslarski.sudoku.domain.model.TournamentBoard
 import com.maslarski.sudoku.ui.game.GameScreen
 import com.maslarski.sudoku.ui.home.HomeScreen
 import com.maslarski.sudoku.ui.leaderboard.LeaderboardScreen
@@ -22,12 +23,13 @@ object Routes {
     const val LEADERBOARD = "leaderboard?gridSize={gridSize}&difficulty={difficulty}"
     const val STORE = "store"
     const val SETTINGS = "settings"
-    const val TOURNAMENTS = "tournaments"
+    const val TOURNAMENTS = "tournaments/{board}"
     const val TROPHY_ROOM = "trophy-room"
 
     fun game(slotId: Int) = "game/$slotId"
     fun leaderboard(gridSize: GridSize? = null, difficulty: Difficulty? = null) =
         "leaderboard?gridSize=${gridSize?.size ?: 9}&difficulty=${difficulty?.name ?: Difficulty.EASY.name}"
+    fun tournaments(board: TournamentBoard = TournamentBoard.ARENA) = "tournaments/${board.name}"
 }
 
 @Composable
@@ -50,6 +52,9 @@ fun SudokuNavHost() {
                 onBack = { navController.popBackStack() },
                 onOpenStore = { navController.navigate(Routes.STORE) },
                 onOpenLeaderboard = { g, d -> navController.navigate(Routes.leaderboard(g, d)) },
+                onOpenTournaments = {
+                    navController.navigate(Routes.tournaments(TournamentBoard.CHAMPIONSHIP))
+                },
                 onNewGame = { navController.popBackStack(Routes.HOME, inclusive = false) },
             )
         }
@@ -62,12 +67,26 @@ fun SudokuNavHost() {
         ) {
             LeaderboardScreen(
                 onBack = { navController.popBackStack() },
-                onOpenTournaments = { navController.navigate(Routes.TOURNAMENTS) },
+                onOpenTournaments = { navController.navigate(Routes.tournaments()) },
                 onOpenTrophyRoom = { navController.navigate(Routes.TROPHY_ROOM) },
             )
         }
-        composable(Routes.TOURNAMENTS) {
-            TournamentsScreen(onBack = { navController.popBackStack() })
+        composable(
+            route = Routes.TOURNAMENTS,
+            arguments = listOf(
+                navArgument("board") {
+                    type = NavType.StringType
+                    defaultValue = TournamentBoard.ARENA.name
+                },
+            ),
+        ) { entry ->
+            val initialBoard = entry.arguments?.getString("board")
+                ?.let { runCatching { TournamentBoard.valueOf(it) }.getOrNull() }
+                ?: TournamentBoard.ARENA
+            TournamentsScreen(
+                onBack = { navController.popBackStack() },
+                initialBoard = initialBoard,
+            )
         }
         composable(Routes.TROPHY_ROOM) {
             TrophyRoomScreen(

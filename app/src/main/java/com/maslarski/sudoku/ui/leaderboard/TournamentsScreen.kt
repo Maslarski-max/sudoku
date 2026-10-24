@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,8 +88,8 @@ class TournamentsViewModel @Inject constructor(
 
     fun refresh() {
         state.update { it.copy(loading = true, arenaError = false, championshipError = false) }
+        viewModelScope.launch { runCatching { repository.flushPending() } }
         viewModelScope.launch {
-            runCatching { repository.flushPending() }
             val month = YearMonth.from(DailyChallenge.dateAt(clock.now()))
             val year = month.year
             val (arena, championship, previousArena, previousChampionship) = coroutineScope {
@@ -117,9 +118,11 @@ class TournamentsViewModel @Inject constructor(
 @Composable
 fun TournamentsScreen(
     onBack: () -> Unit,
+    initialBoard: TournamentBoard = TournamentBoard.ARENA,
     viewModel: TournamentsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(initialBoard) { viewModel.select(initialBoard) }
     val snapshot = if (state.board == TournamentBoard.ARENA) state.arena else state.championship
     val previous = if (state.board == TournamentBoard.ARENA) state.previousArena else state.previousChampionship
 
