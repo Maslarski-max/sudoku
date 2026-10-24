@@ -40,6 +40,7 @@ export interface ValidatedCompletion {
   request: CompletionRequest;
   topology: SudokuTopology;
   emptyCells: number;
+  effectiveDifficulty: Difficulty;
   points: number;
 }
 
@@ -51,6 +52,11 @@ const GRID_BOXES: Record<number, [number, number]> = {
 };
 const DIFFICULTIES: Difficulty[] = ["EASY", "MEDIUM", "HARD"];
 const VARIANTS: Variant[] = ["SAMURAI", "FLOWER", "OUTSIDE"];
+const VARIANT_TARGET_GIVENS: Record<Variant, Record<Difficulty, number>> = {
+  SAMURAI: { EASY: 190, MEDIUM: 165, HARD: 145 },
+  FLOWER: { EASY: 105, MEDIUM: 92, HARD: 82 },
+  OUTSIDE: { EASY: 30, MEDIUM: 25, HARD: 20 },
+};
 const ALLOWED_KEYS = new Set([
   "kind", "variant", "gridSize", "difficulty", "dailyDate", "givens",
   "solutionCells", "comboCells", "outsideClues", "elapsedMillis", "moves",
@@ -308,6 +314,30 @@ export function minimumEmptyCells(
   return Math.floor(topology.activeIndices.length * 0.25);
 }
 
+function emptyCellFloor(
+  request: CompletionRequest,
+  difficulty: Difficulty,
+  activeCellCount: number,
+): number {
+  if (difficulty === "EASY") return 0;
+  if (request.variant) {
+    const targetDifficulty = difficulty === "MEDIUM" ? "EASY" : "MEDIUM";
+    return activeCellCount - VARIANT_TARGET_GIVENS[request.variant][targetDifficulty];
+  }
+  return Math.floor(activeCellCount * (difficulty === "MEDIUM" ? 0.42 : 0.52));
+}
+
+export function effectiveDifficulty(
+  request: CompletionRequest,
+  emptyCells: number,
+  topology = createTopology(request.kind, request.variant, request.gridSize),
+): Difficulty {
+  const activeCellCount = topology.activeIndices.length;
+  const allowedDifficulties = DIFFICULTIES.slice(0, DIFFICULTIES.indexOf(request.difficulty) + 1);
+  return allowedDifficulties.reverse().find((difficulty) =>
+    emptyCells >= emptyCellFloor(request, difficulty, activeCellCount)) ?? "EASY";
+}
+
 function validatePlausibility(
   request: CompletionRequest,
   topology: SudokuTopology,
@@ -333,7 +363,11 @@ function validatePlausibility(
   return emptyCells;
 }
 
-export function computePoints(request: CompletionRequest, emptyCells: number): number {
+export function computePoints(
+  request: CompletionRequest,
+  emptyCells: number,
+  difficulty: Difficulty,
+): number {
   const base = request.variant === "SAMURAI" ? 30
     : request.variant === "FLOWER" ? 25
       : request.variant === "OUTSIDE" ? 15
@@ -341,12 +375,12 @@ export function computePoints(request: CompletionRequest, emptyCells: number): n
   const correct = Math.max(0, emptyCells - request.hintsUsed);
   const comboBonus = request.comboCells.length * base;
   const mistakePenalty = request.mistakes * 20;
-  const secondsPerCell = { EASY: 12, MEDIUM: 16, HARD: 20 }[request.difficulty];
+  const secondsPerCell = { EASY: 12, MEDIUM: 16, HARD: 20 }[difficulty];
   const targetTimeMillis = emptyCells * secondsPerCell * 1_000;
   const remaining = targetTimeMillis - request.elapsedMillis;
   const timeBonus = remaining <= 0 || targetTimeMillis <= 0 ? 0
     : Math.round(base * emptyCells * remaining / targetTimeMillis);
-  const multiplier = { EASY: 1, MEDIUM: 1.5, HARD: 2 }[request.difficulty];
+  const multiplier = { EASY: 1, MEDIUM: 1.5, HARD: 2 }[difficulty];
   return Math.max(0, Math.round(
     (correct * base + comboBonus - mistakePenalty + timeBonus) * multiplier,
   ));
@@ -356,7 +390,14 @@ export function validateCompletion(data: unknown, nowMillis = Date.now()): Valid
   const { request, topology } = shapeRequest(data);
   validateSolution(request, topology);
   const emptyCells = validatePlausibility(request, topology, nowMillis);
-  return { request, topology, emptyCells, points: computePoints(request, emptyCells) };
+  const difficulty = effectiveDifficulty(request, emptyCells, topology);
+  return {
+    request,
+    topology,
+    emptyCells,
+    effectiveDifficulty: difficulty,
+    points: computePoints(request, emptyCells, difficulty),
+  };
 }
 
 export function completionDocumentId(request: CompletionRequest): string {

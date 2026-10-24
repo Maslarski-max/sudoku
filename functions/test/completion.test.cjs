@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const {
   completionDocumentId,
+  computePoints,
   dailyCompletionDocumentId,
   minimumEmptyCells,
   requireAuthenticated,
@@ -20,8 +21,11 @@ function expectCode(action, code) {
 
 test("Kotlin scoring fixtures match exactly", () => {
   for (const fixture of fixtures) {
-    assert.equal(validateCompletion(fixture.payload, Date.parse("2026-10-24T12:00:00Z")).points,
+    const validated = validateCompletion(fixture.payload, Date.parse("2026-10-24T12:00:00Z"));
+    assert.equal(computePoints(fixture.payload, validated.emptyCells, fixture.payload.difficulty),
       fixture.expectedPoints, fixture.name);
+    assert.equal(validated.points,
+      computePoints(fixture.payload, validated.emptyCells, validated.effectiveDifficulty), fixture.name);
   }
 });
 
@@ -99,6 +103,37 @@ test("generator thresholds and dedupe identity are stable", () => {
   const changed = { ...validClassic, givens: [...validClassic.givens] };
   changed.givens[0] = validClassic.solutionCells[0];
   assert.notEqual(id, completionDocumentId(changed));
+});
+
+test("effective difficulty caps points to empties and claimed difficulty", () => {
+  const puzzleWithEmpties = (emptyCells, difficulty) => {
+    const givens = [...validClassic.solutionCells];
+    const activeIndices = validClassic.solutionCells.flatMap((value, index) => value === 0 ? [] : [index]);
+    for (const index of activeIndices.slice(0, emptyCells)) givens[index] = 0;
+    return {
+      ...validClassic,
+      difficulty,
+      givens,
+      comboCells: [],
+      elapsedMillis: emptyCells * 1_000,
+    };
+  };
+
+  const sparseHard = puzzleWithEmpties(21, "HARD");
+  const sparseResult = validateCompletion(sparseHard, Date.parse("2026-10-24T12:00:00Z"));
+  assert.equal(sparseResult.effectiveDifficulty, "EASY");
+  assert.equal(sparseResult.points, computePoints(sparseHard, 21, "EASY"));
+  assert.notEqual(sparseResult.points, computePoints(sparseHard, 21, "HARD"));
+
+  const genuineHard = puzzleWithEmpties(50, "HARD");
+  const hardResult = validateCompletion(genuineHard, Date.parse("2026-10-24T12:00:00Z"));
+  assert.equal(hardResult.effectiveDifficulty, "HARD");
+  assert.equal(hardResult.points, computePoints(genuineHard, 50, "HARD"));
+
+  const claimedEasy = puzzleWithEmpties(50, "EASY");
+  const easyResult = validateCompletion(claimedEasy, Date.parse("2026-10-24T12:00:00Z"));
+  assert.equal(easyResult.effectiveDifficulty, "EASY");
+  assert.equal(easyResult.points, computePoints(claimedEasy, 50, "EASY"));
 });
 
 test("daily dedupe identity is scoped to the user and date", () => {

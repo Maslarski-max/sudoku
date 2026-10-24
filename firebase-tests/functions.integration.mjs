@@ -73,6 +73,7 @@ classic.elapsedMillis = classicEmptyCount * 1_000;
 const classicUser = await createUser();
 const classicResult = await callCompletion(classicUser, classic);
 assert.equal(classicResult.ok, true, JSON.stringify(classicResult));
+assert.equal(classicResult.result.effectiveDifficulty, "EASY");
 const classicGames = await readDocument(
   classicUser,
   `championship/${classicResult.result.championshipPeriod}/scores/${classicUser.localId}`,

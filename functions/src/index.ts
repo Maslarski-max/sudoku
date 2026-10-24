@@ -14,7 +14,7 @@ const firestore = getFirestore();
 export const submitCompletion = onCall({ region: "europe-west1" }, async (call) => {
   requireAuthenticated(call.auth);
   const validated = validateCompletion(call.data);
-  const { request, points } = validated;
+  const { request, points, effectiveDifficulty } = validated;
   const uid = call.auth.uid;
   const playerRef = firestore.collection("players").doc(uid);
   const dedupeRef = playerRef.collection("completions").doc(completionDocumentId(request));
@@ -65,6 +65,7 @@ export const submitCompletion = onCall({ region: "europe-west1" }, async (call) 
       variant: request.variant ?? null,
       gridSize: request.gridSize,
       givens: request.givens,
+      effectiveDifficulty,
       points,
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -79,6 +80,7 @@ export const submitCompletion = onCall({ region: "europe-west1" }, async (call) 
 
   return {
     points,
+    effectiveDifficulty,
     championshipPeriod,
     ...(request.variant === "SAMURAI" || request.variant === "FLOWER" ? { arenaPeriod } : {}),
   };
