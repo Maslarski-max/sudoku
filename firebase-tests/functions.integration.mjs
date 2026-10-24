@@ -9,6 +9,7 @@ const root = `projects/${projectId}/databases/(default)/documents`;
 const fixtures = JSON.parse(await readFile(new URL("../functions/test/fixtures/scoring.json", import.meta.url), "utf8"));
 const classicFixture = fixtures.find((fixture) => fixture.name === "classic-9-easy").payload;
 const samuraiFixture = fixtures.find((fixture) => fixture.name === "samurai-easy").payload;
+const dailyFixture = fixtures.find((fixture) => fixture.name === "daily-medium").payload;
 
 function pass(message) {
   console.log(`PASS ${message}`);
@@ -72,6 +73,7 @@ classic.elapsedMillis = classicEmptyCount * 1_000;
 const classicUser = await createUser();
 const classicResult = await callCompletion(classicUser, classic);
 assert.equal(classicResult.ok, true, JSON.stringify(classicResult));
+assert.equal(classicResult.result.effectiveDifficulty, "EASY");
 const classicGames = await readDocument(
   classicUser,
   `championship/${classicResult.result.championshipPeriod}/scores/${classicUser.localId}`,
@@ -111,6 +113,26 @@ const duplicateScore = await readDocument(
 );
 assert.equal(integer(duplicateScore, "games"), 1);
 pass("duplicate rejected without a second tournament increment");
+
+const daily = structuredClone(dailyFixture);
+daily.dailyDate = new Date().toISOString().slice(0, 10);
+daily.elapsedMillis = daily.givens.filter((value) => value === 0).length * 1_000;
+const dailyUser = await createUser();
+const dailyResult = await callCompletion(dailyUser, daily);
+assert.equal(dailyResult.ok, true, JSON.stringify(dailyResult));
+await new Promise((resolve) => setTimeout(resolve, 40_000));
+const changedDaily = structuredClone(daily);
+const dailyGivenIndex = changedDaily.givens.findIndex((value) => value !== 0);
+changedDaily.givens[dailyGivenIndex] = 0;
+changedDaily.elapsedMillis = changedDaily.givens.filter((value) => value === 0).length * 1_000;
+const dailyDuplicate = await callCompletion(dailyUser, changedDaily);
+assert.equal(dailyDuplicate.code, "already-exists", JSON.stringify(dailyDuplicate));
+const dailyScore = await readDocument(
+  dailyUser,
+  `championship/${dailyResult.result.championshipPeriod}/scores/${dailyUser.localId}`,
+);
+assert.equal(integer(dailyScore, "games"), 1);
+pass("second Daily completion for the same uid and date rejected");
 
 const throttleUser = await createUser();
 const throttleFirst = await callCompletion(throttleUser, classic);

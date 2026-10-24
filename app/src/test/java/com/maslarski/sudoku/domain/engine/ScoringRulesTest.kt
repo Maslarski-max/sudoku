@@ -1,10 +1,14 @@
 package com.maslarski.sudoku.domain.engine
 
+import com.maslarski.sudoku.domain.model.Cell
 import com.maslarski.sudoku.domain.model.Difficulty
 import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Hint
+import com.maslarski.sudoku.domain.model.Puzzle
+import com.maslarski.sudoku.domain.model.Topology
+import com.maslarski.sudoku.domain.model.Variant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -20,12 +24,135 @@ class ScoringRulesTest {
 
     private fun firstEmpty(s: GameState) = s.cells.indexOfFirst { it.isEmpty }
 
+    private fun completedClassicGame(
+        emptyCount: Int,
+        difficulty: Difficulty,
+        elapsedMillis: Long,
+    ): GameState {
+        val gridSize = GridSize.NINE
+        val topology = Topology.forVariant(null, gridSize)
+        val solution = IntArray(topology.cellCount) { index ->
+            val row = index / gridSize.size
+            val column = index % gridSize.size
+            (gridSize.boxCols * (row % gridSize.boxRows) + row / gridSize.boxRows + column) %
+                gridSize.size + 1
+        }
+        val givens = IntArray(topology.cellCount) { index ->
+            if (index < emptyCount) 0 else solution[index]
+        }
+        val puzzle = Puzzle(
+            gridSize = gridSize,
+            difficulty = difficulty,
+            givens = givens,
+            solution = solution,
+            seed = 0L,
+        )
+        val cells = solution.indices.map { index ->
+            Cell(value = solution[index], isGiven = givens[index] != 0)
+        }
+        return GameState.fromPuzzle(puzzle, nowEpochMillis = 0L).copy(
+            cells = cells,
+            elapsedMillis = elapsedMillis,
+            isComplete = true,
+        )
+    }
+
     @Test
     fun `base points per grid size`() {
         assertEquals(10, ScoringRules.basePoints(GridSize.NINE))
         assertEquals(15, ScoringRules.basePoints(GridSize.TWELVE))
         assertEquals(20, ScoringRules.basePoints(GridSize.FIFTEEN))
         assertEquals(25, ScoringRules.basePoints(GridSize.EIGHTEEN))
+    }
+
+    @Test
+    fun `hard claimed 9x9 with 35 empties scores medium and genuine hard stays hard`() {
+        val mediumGame = completedClassicGame(35, Difficulty.HARD, elapsedMillis = 280_000L)
+        val mediumEmptyCount = mediumGame.topology.activeIndices.count {
+            mediumGame.puzzle.givens[it] == 0
+        }
+        assertEquals(35, mediumEmptyCount)
+        assertEquals(
+            Difficulty.MEDIUM,
+            ScoringRules.effectiveDifficulty(
+                mediumGame.difficulty,
+                mediumGame.variant,
+                mediumGame.topology.activeIndices.size,
+                mediumEmptyCount,
+            ),
+        )
+        assertEquals(560_000L, ScoringRules.targetTimeMillis(mediumGame))
+        assertEquals(1.5, ScoringRules.breakdown(mediumGame).multiplier, 0.0)
+
+        val hardGame = completedClassicGame(50, Difficulty.HARD, elapsedMillis = 0L)
+        val hardEmptyCount = hardGame.topology.activeIndices.count {
+            hardGame.puzzle.givens[it] == 0
+        }
+        assertEquals(50, hardEmptyCount)
+        assertEquals(
+            Difficulty.HARD,
+            ScoringRules.effectiveDifficulty(
+                hardGame.difficulty,
+                hardGame.variant,
+                hardGame.topology.activeIndices.size,
+                hardEmptyCount,
+            ),
+        )
+        assertEquals(1_000_000L, ScoringRules.targetTimeMillis(hardGame))
+        assertEquals(2.0, ScoringRules.breakdown(hardGame).multiplier, 0.0)
+    }
+
+    @Test
+    fun `variant floors match server target givens and count only active empty givens`() {
+        val targets = listOf(
+            Triple(Variant.SAMURAI, 190, 165),
+            Triple(Variant.FLOWER, 105, 92),
+            Triple(Variant.OUTSIDE, 30, 25),
+        )
+        targets.forEach { (variant, easyGivens, mediumGivens) ->
+            val activeCellCount = Topology.forVariant(variant, GridSize.NINE).activeIndices.size
+            assertEquals(
+                Difficulty.MEDIUM,
+                ScoringRules.effectiveDifficulty(
+                    Difficulty.HARD,
+                    variant,
+                    activeCellCount,
+                    activeCellCount - easyGivens,
+                ),
+            )
+            assertEquals(
+                Difficulty.HARD,
+                ScoringRules.effectiveDifficulty(
+                    Difficulty.HARD,
+                    variant,
+                    activeCellCount,
+                    activeCellCount - mediumGivens,
+                ),
+            )
+        }
+
+        val topology = Topology.forVariant(Variant.SAMURAI, GridSize.NINE)
+        val solution = IntArray(topology.cellCount)
+        topology.activeIndices.forEach { solution[it] = 1 }
+        val givens = solution.copyOf()
+        topology.activeIndices.take(35).forEach { givens[it] = 0 }
+        val puzzle = Puzzle(
+            gridSize = GridSize.NINE,
+            difficulty = Difficulty.EASY,
+            givens = givens,
+            solution = solution,
+            seed = 1L,
+            variant = Variant.SAMURAI,
+        )
+        val game = GameState.fromPuzzle(puzzle, nowEpochMillis = 0L)
+        assertEquals(35 * 12_000L, ScoringRules.targetTimeMillis(game))
+    }
+
+    @Test
+    fun `35 empty hard request matches TypeScript server score`() {
+        val game = completedClassicGame(35, Difficulty.HARD, elapsedMillis = 280_000L)
+
+        assertEquals(788, ScoringRules.points(game))
     }
 
     @Test

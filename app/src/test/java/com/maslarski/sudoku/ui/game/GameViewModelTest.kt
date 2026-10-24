@@ -939,7 +939,7 @@ private class FakeTournamentRepository(
         submitGate?.await()
         return Result.success(Unit)
     }
-    override suspend fun flushPending() = Unit
+    override suspend fun flushPending() = 0
     override suspend fun load(board: TournamentBoard, period: String, limit: Int, serverOnly: Boolean) =
         Result.success(TournamentSnapshot(board, period, emptyList<TournamentEntry>(), null))
 }

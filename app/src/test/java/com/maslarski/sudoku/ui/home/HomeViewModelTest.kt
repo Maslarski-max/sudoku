@@ -451,7 +451,7 @@ private class FakeDailyChallengeRepository : DailyChallengeRepository {
 private class FakeHomeTournamentRepository : TournamentRepository {
     override suspend fun submitCompletion(state: com.maslarski.sudoku.domain.model.GameState): Result<Unit> =
         Result.success(Unit)
-    override suspend fun flushPending() = Unit
+    override suspend fun flushPending() = 0
     override suspend fun load(
         board: TournamentBoard,
         period: String,
