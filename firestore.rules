@@ -11,46 +11,6 @@ service cloud.firestore {
       return category.matches('^(9|12|15|18)_(EASY|MEDIUM|HARD)$');
     }
 
-    // ScoringRules maximum: 369 Samurai cells × 30 base points × (1 entry + 1 combo + 1 maximum time bonus) × Hard ×2 = 66,420.
-    function perGameMax() {
-      return 66420;
-    }
-
-    function currentArenaPeriod() {
-      let month = request.time.month();
-      return string(request.time.year()) + '-' + (month < 10 ? '0' : '') + string(month);
-    }
-
-    function currentChampionshipPeriod() {
-      return string(request.time.year());
-    }
-
-    function isTournamentScore(data, uid) {
-      return data.keys().hasOnly(['uid', 'displayName', 'points', 'games', 'updatedAt'])
-        && data.keys().hasAll(['uid', 'displayName', 'points', 'games', 'updatedAt'])
-        && data.uid is string && data.uid == request.auth.uid && data.uid == uid
-        && data.displayName is string && data.displayName.size() <= 32
-        && data.points is int && data.games is int
-        && data.updatedAt == request.time;
-    }
-
-    function canCreateTournamentScore(data, uid, period, currentPeriod) {
-      return isSignedIn() && isTournamentScore(data, uid)
-        && period == currentPeriod
-        && data.games == 1
-        && data.points >= 0 && data.points <= perGameMax();
-    }
-
-    function canUpdateTournamentScore(data, uid, period, currentPeriod) {
-      return isSignedIn() && isTournamentScore(data, uid)
-        && period == currentPeriod
-        && resource.data.uid == request.auth.uid
-        && resource.data.games is int && resource.data.points is int
-        && data.games == resource.data.games + 1
-        && data.points - resource.data.points >= 0
-        && data.points - resource.data.points <= perGameMax();
-    }
-
     function isValidScore(data, category) {
       return data.keys().hasOnly(['uid', 'displayName', 'gridSize', 'difficulty', 'timeMillis', 'moves', 'mistakes', 'points', 'completedAt'])
         && data.uid is string && data.uid == request.auth.uid
@@ -90,16 +50,16 @@ service cloud.firestore {
 
     match /arena/{period}/scores/{uid} {
       allow read: if isSignedIn() && period.matches('^\\d{4}-\\d{2}$');
-      allow create: if canCreateTournamentScore(request.resource.data, uid, period, currentArenaPeriod());
-      allow update: if canUpdateTournamentScore(request.resource.data, uid, period, currentArenaPeriod());
-      allow delete: if false;
+      allow write: if false;
     }
 
     match /championship/{period}/scores/{uid} {
       allow read: if isSignedIn() && period.matches('^\\d{4}$');
-      allow create: if canCreateTournamentScore(request.resource.data, uid, period, currentChampionshipPeriod());
-      allow update: if canUpdateTournamentScore(request.resource.data, uid, period, currentChampionshipPeriod());
-      allow delete: if false;
+      allow write: if false;
+    }
+
+    match /players/{document=**} {
+      allow read, write: if false;
     }
 
     match /{document=**} {
