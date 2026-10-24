@@ -22,10 +22,7 @@ function expectCode(action, code) {
 test("Kotlin scoring fixtures match exactly", () => {
   for (const fixture of fixtures) {
     const validated = validateCompletion(fixture.payload, Date.parse("2026-10-24T12:00:00Z"));
-    assert.equal(computePoints(fixture.payload, validated.emptyCells, fixture.payload.difficulty),
-      fixture.expectedPoints, fixture.name);
-    assert.equal(validated.points,
-      computePoints(fixture.payload, validated.emptyCells, validated.effectiveDifficulty), fixture.name);
+    assert.equal(validated.points, fixture.expectedPoints, fixture.name);
   }
 });
 
