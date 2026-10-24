@@ -92,7 +92,7 @@ class DataStoreTrophyRepository @Inject constructor(
         val checkedMonth = prior[CHECKED_ARENA_MONTH]
         if (checkedMonth != nowMonth.toString()) {
             val period = nowMonth.minusMonths(1).toString()
-            val result = tournamentRepository.load(TournamentBoard.ARENA, period)
+            val result = tournamentRepository.load(TournamentBoard.ARENA, period, serverOnly = true)
             if (result.isSuccess) {
                 result.getOrNull()?.let { persistPlacement(TournamentBoard.ARENA, it) }
                 dataStore.edit { it[CHECKED_ARENA_MONTH] = nowMonth.toString() }
@@ -102,7 +102,7 @@ class DataStoreTrophyRepository @Inject constructor(
         val checkedYear = dataStore.data.first()[CHECKED_CHAMPIONSHIP_YEAR]
         if (checkedYear != year) {
             val period = (nowMonth.year - 1).toString()
-            val result = tournamentRepository.load(TournamentBoard.CHAMPIONSHIP, period)
+            val result = tournamentRepository.load(TournamentBoard.CHAMPIONSHIP, period, serverOnly = true)
             if (result.isSuccess) {
                 result.getOrNull()?.let { persistPlacement(TournamentBoard.CHAMPIONSHIP, it) }
                 dataStore.edit { it[CHECKED_CHAMPIONSHIP_YEAR] = year }

@@ -4,6 +4,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 import com.google.android.gms.tasks.Task
 import com.maslarski.sudoku.domain.model.PendingTournamentScore
 import com.maslarski.sudoku.domain.model.Score
@@ -75,15 +76,19 @@ class FirestoreTournamentRepository @Inject constructor(
         board: TournamentBoard,
         period: String,
         limit: Int,
+        serverOnly: Boolean,
     ): Result<TournamentSnapshot> = runCatching {
         require(period.matches(if (board == TournamentBoard.ARENA) ARENA_PERIOD else CHAMPIONSHIP_PERIOD))
         val uid = authRepository.currentUserId ?: authRepository.ensureSignedIn()
         val scores = scores(board, period)
         val query = scores.orderBy(FIELD_POINTS, Query.Direction.DESCENDING)
             .limit(limit.coerceIn(1, MAX_LIMIT).toLong())
-            .get()
-            .awaitNetwork()
-        val entries = query.documents.mapIndexedNotNull { index, document ->
+        val querySnapshot = if (serverOnly) {
+            query.get(Source.SERVER).awaitNetwork()
+        } else {
+            query.get().awaitNetwork()
+        }
+        val entries = querySnapshot.documents.mapIndexedNotNull { index, document ->
             val docUid = document.getString(FIELD_UID) ?: return@mapIndexedNotNull null
             TournamentEntry(
                 rank = index + 1,
@@ -95,15 +100,23 @@ class FirestoreTournamentRepository @Inject constructor(
             )
         }
         val listedPlayer = entries.firstOrNull { it.uid == uid }
-        val player = listedPlayer ?: scores.document(uid).get().awaitNetwork().takeIf { it.exists() }?.let { document ->
-            TournamentEntry(
-                rank = null,
-                uid = uid,
-                displayName = document.getString(FIELD_DISPLAY_NAME).orEmpty(),
-                points = document.getLong(FIELD_POINTS)?.toInt() ?: 0,
-                games = document.getLong(FIELD_GAMES)?.toInt() ?: 0,
-                isCurrentUser = true,
-            )
+        val player = listedPlayer ?: run {
+            val playerDocument = scores.document(uid)
+            val document = if (serverOnly) {
+                playerDocument.get(Source.SERVER).awaitNetwork()
+            } else {
+                playerDocument.get().awaitNetwork()
+            }
+            document.takeIf { it.exists() }?.let {
+                TournamentEntry(
+                    rank = null,
+                    uid = uid,
+                    displayName = it.getString(FIELD_DISPLAY_NAME).orEmpty(),
+                    points = it.getLong(FIELD_POINTS)?.toInt() ?: 0,
+                    games = it.getLong(FIELD_GAMES)?.toInt() ?: 0,
+                    isCurrentUser = true,
+                )
+            }
         }
         TournamentSnapshot(board, period, entries, player)
     }

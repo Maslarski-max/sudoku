@@ -33,6 +33,7 @@ import com.maslarski.sudoku.domain.repository.TournamentRepository
 import com.maslarski.sudoku.domain.repository.TrophyRepository
 import com.maslarski.sudoku.domain.time.EpochClock
 import com.maslarski.sudoku.domain.usecase.SubmitScoreUseCase
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -43,6 +44,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -62,9 +64,10 @@ class GameViewModelTest {
     private lateinit var initial: GameState
     private val games = FakeGameRepository()
     private val lives = FakeLivesRepository()
-    private val leaderboard = FakeLeaderboardRepository()
-    private val tournaments = FakeTournamentRepository()
-    private val trophies = FakeTrophyRepository()
+    private val completionEvents = mutableListOf<String>()
+    private val leaderboard = FakeLeaderboardRepository(completionEvents)
+    private val tournaments = FakeTournamentRepository(completionEvents)
+    private val trophies = FakeTrophyRepository(completionEvents)
     private val reviewPrompt = FakeReviewPromptRepository()
     private val feedback = RecordingGameFeedback()
     private val settings = FakeSettingsRepository()
@@ -73,6 +76,7 @@ class GameViewModelTest {
         1_700_000_000_000L + dispatcher.scheduler.currentTime + clockOffsetMillis
     }
     private val store = ViewModelStore()
+    private lateinit var applicationScope: CoroutineScope
 
     @Before
     fun setUp() {
@@ -87,6 +91,7 @@ class GameViewModelTest {
 
     /** Clears the ViewModel before runTest idles the scheduler, otherwise its timer loop would never let it idle. */
     private fun vmTest(block: suspend TestScope.() -> Unit) = runTest(dispatcher) {
+        applicationScope = this
         try {
             block()
         } finally {
@@ -110,6 +115,7 @@ class GameViewModelTest {
         clock = clock,
         tournamentRepository = tournaments,
         trophyRepository = trophies,
+        applicationScope = applicationScope,
     ).also { store.put("game", it) }
 
     /** The timer ticks forever, so advance a bounded amount of virtual time instead of idling. */
@@ -631,6 +637,29 @@ class GameViewModelTest {
     }
 
     @Test
+    fun `classic submit precedes tournament write and survives view model clearing`() = vmTest {
+        val recordStarted = CompletableDeferred<Unit>()
+        val recordGate = CompletableDeferred<Unit>()
+        tournaments.recordStarted = recordStarted
+        tournaments.recordGate = recordGate
+
+        val vm = viewModel()
+        settle()
+        completeBoard(vm)
+
+        assertTrue(recordStarted.isCompleted)
+        assertEquals(listOf("trophy", "classic", "tournament_CHAMPIONSHIP"), completionEvents)
+        assertEquals(1, leaderboard.submitted.size)
+
+        store.clear()
+        recordGate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1, leaderboard.submitted.size)
+        assertEquals(5, reviewPrompt.completedCount)
+    }
+
+    @Test
     fun `fifth completed puzzle shows review prompt`() = vmTest {
         val vm = viewModel()
         settle()
@@ -853,33 +882,46 @@ private class FailingAuthRepository : AuthRepository {
     override suspend fun ensureSignedIn(): String = throw IOException("auth unreachable")
 }
 
-private class FakeLeaderboardRepository : LeaderboardRepository {
+private class FakeLeaderboardRepository(
+    private val completionEvents: MutableList<String>,
+) : LeaderboardRepository {
     val submitted = mutableListOf<Score>()
     var result: Result<Boolean> = Result.success(true)
     override fun observeTop(category: LeaderboardCategory, limit: Int): Flow<List<LeaderboardEntry>> = flowOf(emptyList())
     override suspend fun refresh(category: LeaderboardCategory, limit: Int): Result<Unit> = Result.success(Unit)
     override suspend fun personalBest(category: LeaderboardCategory): Score? = null
     override suspend fun submit(score: Score): Result<Boolean> {
+        completionEvents += "classic"
         submitted += score
         return result
     }
 }
 
-private class FakeTournamentRepository : TournamentRepository {
+private class FakeTournamentRepository(
+    private val completionEvents: MutableList<String>,
+) : TournamentRepository {
     val records = mutableListOf<Triple<TournamentBoard, Long, Int>>()
+    var recordStarted: CompletableDeferred<Unit>? = null
+    var recordGate: CompletableDeferred<Unit>? = null
     override suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int): Result<Unit> {
+        completionEvents += "tournament_${board.name}"
         records += Triple(board, completedAtEpochMillis, points)
+        recordStarted?.complete(Unit)
+        recordGate?.await()
         return Result.success(Unit)
     }
     override suspend fun flushPending() = Unit
-    override suspend fun load(board: TournamentBoard, period: String, limit: Int) =
+    override suspend fun load(board: TournamentBoard, period: String, limit: Int, serverOnly: Boolean) =
         Result.success(TournamentSnapshot(board, period, emptyList<TournamentEntry>(), null))
 }
 
-private class FakeTrophyRepository : TrophyRepository {
+private class FakeTrophyRepository(
+    private val completionEvents: MutableList<String>,
+) : TrophyRepository {
     val completions = mutableListOf<GameState>()
     override val trophies: Flow<List<Trophy>> = flowOf(emptyList())
     override suspend fun recordCompletion(state: GameState) {
+        completionEvents += "trophy"
         completions += state
     }
     override suspend fun refreshPeriodAwards() = Unit

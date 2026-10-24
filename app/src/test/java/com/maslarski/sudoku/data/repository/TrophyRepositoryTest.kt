@@ -17,6 +17,7 @@ import com.maslarski.sudoku.domain.repository.DailyChallengeRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.TournamentRepository
 import com.maslarski.sudoku.domain.time.EpochClock
+import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,6 +92,40 @@ class TrophyRepositoryTest {
         assertTrue(awards.any { it.id == "tournament_championship_2023_2" })
         assertEquals(listOf("2024-02", "2023"), tournaments.periods)
     }
+
+    @Test
+    fun `failed server podium load retries until success and marks the period checked`() = runTest {
+        val arenaPeriod = "2024-02"
+        val arenaKey = TournamentBoard.ARENA to arenaPeriod
+        val arena = TournamentSnapshot(
+            TournamentBoard.ARENA,
+            arenaPeriod,
+            emptyList(),
+            TournamentEntry(1, "player", "Player", 1200, 3, true),
+        )
+        val tournaments = AwardTournamentRepository(emptyMap())
+        tournaments.setResponse(arenaKey, Result.failure(IOException("offline")))
+        val repository = DataStoreTrophyRepository(
+            MemoryPreferencesStore(),
+            FakeDailyRepository(emptySet()),
+            tournaments,
+            FakeLivesRepository(),
+            EpochClock { Instant.parse("2024-03-01T12:00:00Z").toEpochMilli() },
+        )
+
+        repository.refreshPeriodAwards()
+
+        assertEquals(1, tournaments.requests.count { it == arenaKey })
+        assertTrue(repository.trophies.first().none { it.id == "tournament_arena_2024-02_1" })
+
+        tournaments.setResponse(arenaKey, Result.success(arena))
+        repository.refreshPeriodAwards()
+        assertTrue(repository.trophies.first().any { it.id == "tournament_arena_2024-02_1" })
+        repository.refreshPeriodAwards()
+
+        assertEquals(2, tournaments.requests.count { it == arenaKey })
+        assertTrue(tournaments.serverOnlyRequests.all { it })
+    }
 }
 
 private class MemoryPreferencesStore : DataStore<Preferences> {
@@ -118,13 +153,28 @@ private class FakeLivesRepository : LivesRepository {
 }
 
 private class AwardTournamentRepository(
-    private val responses: Map<Pair<TournamentBoard, String>, Result<TournamentSnapshot>>,
+    responses: Map<Pair<TournamentBoard, String>, Result<TournamentSnapshot>>,
 ) : TournamentRepository {
+    private val responses = responses.toMutableMap()
     val periods = mutableListOf<String>()
+    val requests = mutableListOf<Pair<TournamentBoard, String>>()
+    val serverOnlyRequests = mutableListOf<Boolean>()
+
+    fun setResponse(key: Pair<TournamentBoard, String>, result: Result<TournamentSnapshot>) {
+        responses[key] = result
+    }
+
     override suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int) = Result.success(Unit)
     override suspend fun flushPending() = Unit
-    override suspend fun load(board: TournamentBoard, period: String, limit: Int): Result<TournamentSnapshot> {
+    override suspend fun load(
+        board: TournamentBoard,
+        period: String,
+        limit: Int,
+        serverOnly: Boolean,
+    ): Result<TournamentSnapshot> {
         periods += period
+        requests += board to period
+        serverOnlyRequests += serverOnly
         return responses[board to period] ?: Result.success(TournamentSnapshot(board, period, emptyList(), null))
     }
 }

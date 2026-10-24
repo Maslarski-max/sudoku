@@ -7,6 +7,7 @@ import com.maslarski.sudoku.domain.engine.GameEngine
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.engine.ScoreBreakdown
 import com.maslarski.sudoku.domain.engine.ScoringRules
+import com.maslarski.sudoku.di.ApplicationScope
 import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.Hint
@@ -23,6 +24,7 @@ import com.maslarski.sudoku.domain.repository.TrophyRepository
 import com.maslarski.sudoku.domain.time.EpochClock
 import com.maslarski.sudoku.domain.usecase.SubmitScoreUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -97,6 +99,7 @@ class GameViewModel @Inject constructor(
     private val clock: EpochClock,
     private val tournamentRepository: TournamentRepository,
     private val trophyRepository: TrophyRepository,
+    @ApplicationScope private val applicationScope: CoroutineScope,
 ) : ViewModel() {
 
     private val slotId: Int = checkNotNull(savedStateHandle.get<Int>("gridSize"))
@@ -442,11 +445,20 @@ class GameViewModel @Inject constructor(
         completionHandled = true
         feedback.puzzleCompleted()
         timerJob?.cancel()
-        viewModelScope.launch {
+        applicationScope.launch {
             gameRepository.save(state)
             val completedAt = clock.now()
             val points = ScoringRules.points(state)
             runCatching { trophyRepository.recordCompletion(state) }
+            val submission = when {
+                state.dailyDate != null -> ScoreSubmission.Championship
+                state.variant != null -> ScoreSubmission.LocalOnly
+                else -> submitScore(state).fold(
+                    onSuccess = { uploaded -> if (uploaded) ScoreSubmission.Submitted else ScoreSubmission.NotPersonalBest },
+                    onFailure = { ScoreSubmission.Pending },
+                )
+            }
+            local.update { it.copy(scoreSubmission = submission) }
             if (state.dailyDate != null) {
                 runCatching { tournamentRepository.record(TournamentBoard.CHAMPIONSHIP, completedAt, points) }
             } else if (state.variant != null) {
@@ -460,17 +472,6 @@ class GameViewModel @Inject constructor(
             if (runCatching { reviewPrompt.onPuzzleCompleted() }.getOrDefault(false)) {
                 local.update { it.copy(showReviewPrompt = true) }
             }
-            val submission = if (state.dailyDate != null) {
-                ScoreSubmission.Championship
-            } else if (state.variant != null) {
-                ScoreSubmission.LocalOnly
-            } else {
-                submitScore(state).fold(
-                    onSuccess = { uploaded -> if (uploaded) ScoreSubmission.Submitted else ScoreSubmission.NotPersonalBest },
-                    onFailure = { ScoreSubmission.Pending },
-                )
-            }
-            local.update { it.copy(scoreSubmission = submission) }
         }
     }
 

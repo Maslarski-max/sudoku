@@ -20,6 +20,7 @@ import com.android.billingclient.api.UnfetchedProduct
 import com.android.billingclient.api.acknowledgePurchase
 import com.android.billingclient.api.consumePurchase
 import com.android.billingclient.api.queryPurchasesAsync
+import com.maslarski.sudoku.di.ApplicationScope
 import com.maslarski.sudoku.domain.model.BillingAvailability
 import com.maslarski.sudoku.domain.model.BillingEvent
 import com.maslarski.sudoku.domain.model.Lives
@@ -58,7 +59,7 @@ import javax.inject.Singleton
 class PlayBillingRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val livesRepository: LivesRepository,
-    private val scope: CoroutineScope,
+    @ApplicationScope private val scope: CoroutineScope,
 ) : BillingRepository, PurchasesUpdatedListener {
 
     private val _availability = MutableStateFlow(BillingAvailability.CONNECTING)

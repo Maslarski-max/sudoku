@@ -49,7 +49,12 @@ interface TournamentPendingQueue {
 interface TournamentRepository {
     suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int): Result<Unit>
     suspend fun flushPending()
-    suspend fun load(board: TournamentBoard, period: String, limit: Int = 50): Result<TournamentSnapshot>
+    suspend fun load(
+        board: TournamentBoard,
+        period: String,
+        limit: Int = 50,
+        serverOnly: Boolean = false,
+    ): Result<TournamentSnapshot>
 }
 
 interface TrophyRepository {

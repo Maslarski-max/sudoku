@@ -59,12 +59,16 @@ import javax.inject.Inject
 data class TournamentsUiState(
     val board: TournamentBoard = TournamentBoard.ARENA,
     val loading: Boolean = true,
-    val error: Boolean = false,
+    val arenaError: Boolean = false,
+    val championshipError: Boolean = false,
     val arena: TournamentSnapshot? = null,
     val championship: TournamentSnapshot? = null,
     val previousArena: TournamentSnapshot? = null,
     val previousChampionship: TournamentSnapshot? = null,
-)
+) {
+    val error: Boolean
+        get() = if (board == TournamentBoard.ARENA) arenaError else championshipError
+}
 
 @HiltViewModel
 class TournamentsViewModel @Inject constructor(
@@ -82,7 +86,7 @@ class TournamentsViewModel @Inject constructor(
     fun select(board: TournamentBoard) = state.update { it.copy(board = board) }
 
     fun refresh() {
-        state.update { it.copy(loading = true, error = false) }
+        state.update { it.copy(loading = true, arenaError = false, championshipError = false) }
         viewModelScope.launch {
             runCatching { repository.flushPending() }
             val month = YearMonth.from(DailyChallenge.dateAt(clock.now()))
@@ -97,7 +101,8 @@ class TournamentsViewModel @Inject constructor(
             state.update {
                 it.copy(
                     loading = false,
-                    error = if (it.board == TournamentBoard.ARENA) arena.isFailure else championship.isFailure,
+                    arenaError = arena.isFailure,
+                    championshipError = championship.isFailure,
                     arena = arena.getOrNull(),
                     championship = championship.getOrNull(),
                     previousArena = previousArena.getOrNull(),

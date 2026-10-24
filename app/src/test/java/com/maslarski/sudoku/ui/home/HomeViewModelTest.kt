@@ -453,7 +453,12 @@ private class FakeHomeTournamentRepository : TournamentRepository {
     override suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int): Result<Unit> =
         Result.success(Unit)
     override suspend fun flushPending() = Unit
-    override suspend fun load(board: TournamentBoard, period: String, limit: Int): Result<TournamentSnapshot> =
+    override suspend fun load(
+        board: TournamentBoard,
+        period: String,
+        limit: Int,
+        serverOnly: Boolean,
+    ): Result<TournamentSnapshot> =
         Result.success(TournamentSnapshot(board, period, emptyList(), null))
 }
 
