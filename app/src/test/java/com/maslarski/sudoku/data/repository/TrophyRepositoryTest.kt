@@ -153,6 +153,43 @@ class TrophyRepositoryTest {
     }
 
     @Test
+    fun `legacy checkpoint scans bounded window and awards earlier unchecked month`() = runTest {
+        val store = MemoryPreferencesStore()
+        store.updateData { preferences ->
+            preferences.toMutablePreferences().apply {
+                this[stringPreferencesKey("trophy_checked_arena_month")] = "2024-03"
+                this[stringPreferencesKey("trophy_checked_championship_period")] = "2023"
+            }
+        }
+        val january = TournamentSnapshot(
+            TournamentBoard.ARENA,
+            "2024-01",
+            emptyList(),
+            TournamentEntry(1, "player", "Player", 1200, 3, true),
+        )
+        val tournaments = AwardTournamentRepository(
+            mapOf((TournamentBoard.ARENA to "2024-01") to Result.success(january)),
+        )
+        val repository = DataStoreTrophyRepository(
+            store,
+            FakeDailyRepository(emptySet()),
+            tournaments,
+            FakeLivesRepository(),
+            EpochClock { Instant.parse("2024-04-01T12:00:00Z").toEpochMilli() },
+        )
+
+        repository.refreshPeriodAwards()
+
+        assertEquals("2023-04", tournaments.requests.first { it.first == TournamentBoard.ARENA }.second)
+        assertTrue(tournaments.requests.any { it == TournamentBoard.ARENA to "2024-01" })
+        assertTrue(repository.trophies.first().any { it.id == "tournament_arena_2024-01_1" })
+        assertTrue(tournaments.serverOnlyRequests.all { it })
+        val checked = store.data.first()
+        assertEquals("2024-03", checked[stringPreferencesKey("trophy_checked_arena_period")])
+        assertEquals(null, checked[stringPreferencesKey("trophy_checked_arena_month")])
+    }
+
+    @Test
     fun `failed server podium load retries until success and marks the period checked`() = runTest {
         val arenaPeriod = "2024-02"
         val arenaKey = TournamentBoard.ARENA to arenaPeriod
@@ -231,7 +268,7 @@ private class AwardTournamentRepository(
     }
 
     override suspend fun submitCompletion(state: GameState) = Result.success(Unit)
-    override suspend fun flushPending() = Unit
+    override suspend fun flushPending() = 0
     override suspend fun load(
         board: TournamentBoard,
         period: String,

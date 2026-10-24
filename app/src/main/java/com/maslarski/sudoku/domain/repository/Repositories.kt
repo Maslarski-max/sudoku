@@ -47,7 +47,7 @@ interface TournamentPendingQueue {
 
 interface TournamentRepository {
     suspend fun submitCompletion(state: GameState): Result<Unit>
-    suspend fun flushPending()
+    suspend fun flushPending(): Int
     suspend fun load(
         board: TournamentBoard,
         period: String,

@@ -48,6 +48,7 @@ import com.maslarski.sudoku.domain.repository.TournamentRepository
 import com.maslarski.sudoku.domain.time.EpochClock
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.YearMonth
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -88,8 +89,16 @@ class TournamentsViewModel @Inject constructor(
 
     fun refresh() {
         state.update { it.copy(loading = true, arenaError = false, championshipError = false) }
-        viewModelScope.launch { runCatching { repository.flushPending() } }
         viewModelScope.launch {
+            val pendingFlush = async {
+                try {
+                    repository.flushPending()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Throwable) {
+                    0
+                }
+            }
             val month = YearMonth.from(DailyChallenge.dateAt(clock.now()))
             val year = month.year
             val (arena, championship, previousArena, previousChampionship) = coroutineScope {
@@ -109,6 +118,23 @@ class TournamentsViewModel @Inject constructor(
                     previousArena = previousArena.getOrNull(),
                     previousChampionship = previousChampionship.getOrNull(),
                 )
+            }
+            if (pendingFlush.await() > 0) {
+                state.update { it.copy(loading = true) }
+                val (updatedArena, updatedChampionship) = coroutineScope {
+                    val currentArena = async { repository.load(TournamentBoard.ARENA, month.toString()) }
+                    val currentChampionship = async { repository.load(TournamentBoard.CHAMPIONSHIP, year.toString()) }
+                    currentArena.await() to currentChampionship.await()
+                }
+                state.update {
+                    it.copy(
+                        loading = false,
+                        arenaError = updatedArena.isFailure,
+                        championshipError = updatedChampionship.isFailure,
+                        arena = updatedArena.getOrNull(),
+                        championship = updatedChampionship.getOrNull(),
+                    )
+                }
             }
         }
     }

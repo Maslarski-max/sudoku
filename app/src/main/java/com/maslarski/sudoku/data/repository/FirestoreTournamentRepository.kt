@@ -45,12 +45,15 @@ class FirestoreTournamentRepository @Inject constructor(
         }
     }
 
-    override suspend fun flushPending() {
-        if (pendingQueue.entries().isEmpty()) return
+    override suspend fun flushPending(): Int {
+        if (pendingQueue.entries().isEmpty()) return 0
         val uid = withTimeoutOrNull(NETWORK_TIMEOUT_MILLIS) { signedInUidOrNull() }
+        var submittedCount = 0
         flushCompletionQueue(pendingQueue, uid) { encoded, _ ->
             submitCallable(json.decodeFromString<TournamentCompletionPayload>(encoded))
+            submittedCount++
         }
+        return submittedCount
     }
 
     override suspend fun load(

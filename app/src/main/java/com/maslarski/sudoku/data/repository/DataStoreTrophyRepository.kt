@@ -91,47 +91,50 @@ class DataStoreTrophyRepository @Inject constructor(
         val prior = dataStore.data.first()
         val checkedMonth = prior[CHECKED_ARENA_PERIOD]
             ?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
-            ?: prior[LEGACY_CHECKED_ARENA_MONTH]
-                ?.let { runCatching { YearMonth.parse(it).minusMonths(1) }.getOrNull() }
         val firstArenaMonth = maxOf(
             nowMonth.minusMonths(12),
             checkedMonth?.plusMonths(1) ?: nowMonth.minusMonths(12),
         )
         var arenaMonth = firstArenaMonth
         val lastArenaMonth = nowMonth.minusMonths(1)
+        var lastCheckedArenaMonth = checkedMonth
         while (!arenaMonth.isAfter(lastArenaMonth)) {
             val period = arenaMonth.toString()
             val result = tournamentRepository.load(TournamentBoard.ARENA, period, serverOnly = true)
             if (result.isFailure) break
             result.getOrNull()?.let { persistPlacement(TournamentBoard.ARENA, it) }
+            lastCheckedArenaMonth = arenaMonth
+            arenaMonth = arenaMonth.plusMonths(1)
+        }
+        if (lastCheckedArenaMonth != checkedMonth) {
             dataStore.edit {
-                it[CHECKED_ARENA_PERIOD] = period
+                it[CHECKED_ARENA_PERIOD] = requireNotNull(lastCheckedArenaMonth).toString()
                 it.remove(LEGACY_CHECKED_ARENA_MONTH)
             }
-            arenaMonth = arenaMonth.plusMonths(1)
         }
         val checkedYearPreferences = dataStore.data.first()
         val checkedYear = checkedYearPreferences[CHECKED_CHAMPIONSHIP_PERIOD]
             ?.toIntOrNull()
-            ?: checkedYearPreferences[LEGACY_CHECKED_CHAMPIONSHIP_YEAR]
-                ?.toIntOrNull()
-                ?.minus(1)
         val firstChampionshipYear = maxOf(
             nowMonth.year - 3,
             checkedYear?.plus(1) ?: nowMonth.year - 3,
         )
         var championshipYear = firstChampionshipYear
         val lastChampionshipYear = nowMonth.year - 1
+        var lastCheckedChampionshipYear = checkedYear
         while (championshipYear <= lastChampionshipYear) {
             val period = championshipYear.toString()
             val result = tournamentRepository.load(TournamentBoard.CHAMPIONSHIP, period, serverOnly = true)
             if (result.isFailure) break
             result.getOrNull()?.let { persistPlacement(TournamentBoard.CHAMPIONSHIP, it) }
+            lastCheckedChampionshipYear = championshipYear
+            championshipYear++
+        }
+        if (lastCheckedChampionshipYear != checkedYear) {
             dataStore.edit {
-                it[CHECKED_CHAMPIONSHIP_PERIOD] = period
+                it[CHECKED_CHAMPIONSHIP_PERIOD] = requireNotNull(lastCheckedChampionshipYear).toString()
                 it.remove(LEGACY_CHECKED_CHAMPIONSHIP_YEAR)
             }
-            championshipYear++
         }
     }
 
