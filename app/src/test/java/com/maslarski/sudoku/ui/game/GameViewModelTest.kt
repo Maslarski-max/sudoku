@@ -637,7 +637,7 @@ class GameViewModelTest {
     }
 
     @Test
-    fun `classic submit precedes tournament write and survives view model clearing`() = vmTest {
+    fun `classic submit survives view model clearing while tournament write is suspended`() = vmTest {
         val recordStarted = CompletableDeferred<Unit>()
         val recordGate = CompletableDeferred<Unit>()
         tournaments.recordStarted = recordStarted
@@ -648,7 +648,6 @@ class GameViewModelTest {
         completeBoard(vm)
 
         assertTrue(recordStarted.isCompleted)
-        assertEquals(listOf("trophy", "classic", "tournament_CHAMPIONSHIP"), completionEvents)
         assertEquals(1, leaderboard.submitted.size)
 
         store.clear()
@@ -657,6 +656,30 @@ class GameViewModelTest {
 
         assertEquals(1, leaderboard.submitted.size)
         assertEquals(5, reviewPrompt.completedCount)
+    }
+
+    @Test
+    fun `tournament record starts while classic submit is suspended`() = vmTest {
+        val submitStarted = CompletableDeferred<Unit>()
+        val submitGate = CompletableDeferred<Unit>()
+        leaderboard.submitStarted = submitStarted
+        leaderboard.submitGate = submitGate
+        val recordStarted = CompletableDeferred<Unit>()
+        tournaments.recordStarted = recordStarted
+
+        val vm = viewModel()
+        settle()
+        completeBoard(vm)
+
+        assertTrue(submitStarted.isCompleted)
+        assertFalse(submitGate.isCompleted)
+        assertTrue(recordStarted.isCompleted)
+        assertEquals(1, leaderboard.submitted.size)
+
+        submitGate.complete(Unit)
+        settle()
+
+        assertEquals(ScoreSubmission.Submitted, vm.uiState.value.scoreSubmission)
     }
 
     @Test
@@ -887,12 +910,16 @@ private class FakeLeaderboardRepository(
 ) : LeaderboardRepository {
     val submitted = mutableListOf<Score>()
     var result: Result<Boolean> = Result.success(true)
+    var submitStarted: CompletableDeferred<Unit>? = null
+    var submitGate: CompletableDeferred<Unit>? = null
     override fun observeTop(category: LeaderboardCategory, limit: Int): Flow<List<LeaderboardEntry>> = flowOf(emptyList())
     override suspend fun refresh(category: LeaderboardCategory, limit: Int): Result<Unit> = Result.success(Unit)
     override suspend fun personalBest(category: LeaderboardCategory): Score? = null
     override suspend fun submit(score: Score): Result<Boolean> {
         completionEvents += "classic"
         submitted += score
+        submitStarted?.complete(Unit)
+        submitGate?.await()
         return result
     }
 }

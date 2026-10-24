@@ -450,6 +450,17 @@ class GameViewModel @Inject constructor(
             val completedAt = clock.now()
             val points = ScoringRules.points(state)
             runCatching { trophyRepository.recordCompletion(state) }
+            val tournamentBoards = when {
+                state.dailyDate != null -> listOf(TournamentBoard.CHAMPIONSHIP)
+                state.variant == Variant.SAMURAI || state.variant == Variant.FLOWER ->
+                    listOf(TournamentBoard.ARENA, TournamentBoard.CHAMPIONSHIP)
+                else -> listOf(TournamentBoard.CHAMPIONSHIP)
+            }
+            launch {
+                tournamentBoards.forEach { board ->
+                    runCatching { tournamentRepository.record(board, completedAt, points) }
+                }
+            }
             val submission = when {
                 state.dailyDate != null -> ScoreSubmission.Championship
                 state.variant != null -> ScoreSubmission.LocalOnly
@@ -459,16 +470,6 @@ class GameViewModel @Inject constructor(
                 )
             }
             local.update { it.copy(scoreSubmission = submission) }
-            if (state.dailyDate != null) {
-                runCatching { tournamentRepository.record(TournamentBoard.CHAMPIONSHIP, completedAt, points) }
-            } else if (state.variant != null) {
-                if (state.variant == Variant.SAMURAI || state.variant == Variant.FLOWER) {
-                    runCatching { tournamentRepository.record(TournamentBoard.ARENA, completedAt, points) }
-                }
-                runCatching { tournamentRepository.record(TournamentBoard.CHAMPIONSHIP, completedAt, points) }
-            } else {
-                runCatching { tournamentRepository.record(TournamentBoard.CHAMPIONSHIP, completedAt, points) }
-            }
             if (runCatching { reviewPrompt.onPuzzleCompleted() }.getOrDefault(false)) {
                 local.update { it.copy(showReviewPrompt = true) }
             }
