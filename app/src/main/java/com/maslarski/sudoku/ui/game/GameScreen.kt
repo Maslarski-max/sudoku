@@ -133,13 +133,20 @@ fun GameScreen(
             TopAppBar(
                 title = {
                     if (game != null) {
-                        val title = game.variant?.let { variant ->
-                            stringResource(
+                        val variant = game.variant
+                        val title = when {
+                            game.dailyDate != null -> stringResource(R.string.game_title_daily, game.dailyDate)
+                            variant != null -> stringResource(
                                 R.string.game_title_variant,
                                 stringResource(variantName(variant)),
                                 difficultyLabel(game.difficulty),
                             )
-                        } ?: stringResource(R.string.game_title, game.gridSize.size, difficultyLabel(game.difficulty))
+                            else -> stringResource(
+                                R.string.game_title,
+                                game.gridSize.size,
+                                difficultyLabel(game.difficulty),
+                            )
+                        }
                         Text(title)
                     }
                 },
@@ -189,6 +196,7 @@ fun GameScreen(
                 }
             }
         }
+        val boardGame = remember(game.cells, game.puzzle, game.iconMode) { game }
 
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp),
@@ -197,7 +205,7 @@ fun GameScreen(
             StatusRow(game = game, state = state)
 
             SudokuBoard(
-                game = game,
+                game = boardGame,
                 selectedIndex = state.selectedIndex,
                 activeHint = state.activeHint,
                 candidateMasks = candidateMasks,
@@ -670,6 +678,7 @@ private fun CompletionDialog(
                     ScoreSubmission.Pending -> Text(stringResource(R.string.complete_score_pending))
                     ScoreSubmission.NotPersonalBest -> Text(stringResource(R.string.complete_score_not_best))
                     ScoreSubmission.LocalOnly -> Text(stringResource(R.string.complete_local_only))
+                    ScoreSubmission.Championship -> Text(stringResource(R.string.complete_score_championship))
                     ScoreSubmission.NotSubmitted -> Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                     }

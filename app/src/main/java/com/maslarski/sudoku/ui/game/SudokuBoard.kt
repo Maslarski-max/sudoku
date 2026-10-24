@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -20,8 +21,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.onSizeChanged
@@ -131,6 +133,8 @@ fun SudokuBoard(
     val outsideMargin = if (game.variant == Variant.OUTSIDE) 2 else 0
     val iconMode = game.iconMode && game.variant == null && (n == 9 || n == 12)
     val iconPainters = if (iconMode) HolidayIcons.take(n).map { rememberVectorPainter(it) } else emptyList()
+    val currentTopology by rememberUpdatedState(topology)
+    val currentOnCellTap by rememberUpdatedState(onCellTap)
     // Digits repeat across the board, so each (text, style) is laid out once per cell size instead of
     // once per cell per frame (18x18 = 324 cells plus notes).
     val layoutCache = remember(n, colors, game.variant) { TextLayoutCache(textMeasurer) }
@@ -183,31 +187,38 @@ fun SudokuBoard(
                     val margin = if (outsideMargin > 0) cell else 0f
                     val col = floor((local.x - margin) / cell).toInt()
                     val row = floor((local.y - margin) / cell).toInt()
-                    if (row in 0 until topology.height && col in 0 until topology.width) {
-                        val index = row * topology.width + col
-                        if (topology.active[index]) onCellTap(index)
+                    val activeTopology = currentTopology
+                    if (row in 0 until activeTopology.height && col in 0 until activeTopology.width) {
+                        val index = row * activeTopology.width + col
+                        if (activeTopology.active[index]) currentOnCellTap(index)
                     }
                 }
             },
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            translate(transform.offset.x, transform.offset.y) {
-                scale(transform.scale, pivot = Offset.Zero) {
-                    drawBoard(
-                        game = game,
-                        selectedIndex = selectedIndex,
-                        selectedValue = selectedValue,
-                        selectedPeers = selectedPeers,
-                        activeHint = activeHint,
-                        hintRelated = hintRelated,
-                        candidateMasks = candidateMasks,
-                        iconPainters = iconPainters,
-                        colors = colors,
-                        layouts = layoutCache,
-                        outsideMargin = outsideMargin,
-                    )
-                }
-            }
+        Canvas(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = transform.offset.x
+                    translationY = transform.offset.y
+                    scaleX = transform.scale
+                    scaleY = transform.scale
+                    transformOrigin = TransformOrigin(0f, 0f)
+                },
+        ) {
+            drawBoard(
+                game = game,
+                selectedIndex = selectedIndex,
+                selectedValue = selectedValue,
+                selectedPeers = selectedPeers,
+                activeHint = activeHint,
+                hintRelated = hintRelated,
+                candidateMasks = candidateMasks,
+                iconPainters = iconPainters,
+                colors = colors,
+                layouts = layoutCache,
+                outsideMargin = outsideMargin,
+            )
         }
     }
 }

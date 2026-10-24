@@ -84,6 +84,7 @@ class GameStateSerializer @Inject constructor() {
         val variant: String? = null,
         val outsideClues: OutsideCluesDto? = null,
         val iconMode: Boolean = false,
+        val dailyDate: String? = null,
     ) {
         fun toState(): GameState = GameState(
             puzzle = Puzzle(
@@ -111,7 +112,8 @@ class GameStateSerializer @Inject constructor() {
             comboStreak = comboStreak,
             lastCorrectElapsedMillis = lastCorrectElapsedMillis,
             countedCells = countedCells.toSet(),
-            iconMode = iconMode,
+            iconMode = iconMode && dailyDate == null && variant == null,
+            dailyDate = dailyDate,
         )
 
         companion object {
@@ -140,6 +142,7 @@ class GameStateSerializer @Inject constructor() {
                 variant = s.puzzle.variant?.name,
                 outsideClues = s.puzzle.outsideClues?.let(OutsideCluesDto::from),
                 iconMode = s.iconMode,
+                dailyDate = s.dailyDate,
             )
         }
     }

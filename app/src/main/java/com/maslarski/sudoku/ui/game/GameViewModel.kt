@@ -7,18 +7,23 @@ import com.maslarski.sudoku.domain.engine.GameEngine
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.engine.ScoreBreakdown
 import com.maslarski.sudoku.domain.engine.ScoringRules
+import com.maslarski.sudoku.di.ApplicationScope
 import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.domain.model.Lives
+import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.GameFeedback
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import com.maslarski.sudoku.domain.repository.SettingsRepository
+import com.maslarski.sudoku.domain.repository.TournamentRepository
+import com.maslarski.sudoku.domain.repository.TrophyRepository
 import com.maslarski.sudoku.domain.time.EpochClock
 import com.maslarski.sudoku.domain.usecase.SubmitScoreUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -45,6 +50,7 @@ sealed interface ScoreSubmission {
     /** Completed, but did not beat the player's existing best in this category. */
     data object NotPersonalBest : ScoreSubmission
     data object LocalOnly : ScoreSubmission
+    data object Championship : ScoreSubmission
 }
 
 data class GameUiState(
@@ -90,6 +96,9 @@ class GameViewModel @Inject constructor(
     private val feedback: GameFeedback,
     private val settingsRepository: SettingsRepository,
     private val clock: EpochClock,
+    private val tournamentRepository: TournamentRepository,
+    private val trophyRepository: TrophyRepository,
+    @ApplicationScope private val applicationScope: CoroutineScope,
 ) : ViewModel() {
 
     private val slotId: Int = checkNotNull(savedStateHandle.get<Int>("gridSize"))
@@ -125,7 +134,11 @@ class GameViewModel @Inject constructor(
                 if (game.isComplete) {
                     local.update {
                         it.copy(
-                            scoreSubmission = if (game.variant == null) ScoreSubmission.Submitted else ScoreSubmission.LocalOnly,
+                            scoreSubmission = when {
+                                game.dailyDate != null -> ScoreSubmission.Championship
+                                game.variant != null -> ScoreSubmission.LocalOnly
+                                else -> ScoreSubmission.Submitted
+                            },
                         )
                     }
                 } else {
@@ -346,7 +359,8 @@ class GameViewModel @Inject constructor(
     fun toggleNotesMode() = local.update { it.copy(notesMode = !it.notesMode) }
 
     fun toggleCandidates() {
-        if (local.value.lives?.unlimited != true) {
+        val lives = local.value.lives ?: return
+        if (!lives.unlimited) {
             local.update { it.copy(showCandidatesUpsell = true) }
             return
         }
@@ -430,20 +444,24 @@ class GameViewModel @Inject constructor(
         completionHandled = true
         feedback.puzzleCompleted()
         timerJob?.cancel()
-        viewModelScope.launch {
+        applicationScope.launch {
             gameRepository.save(state)
-            if (runCatching { reviewPrompt.onPuzzleCompleted() }.getOrDefault(false)) {
-                local.update { it.copy(showReviewPrompt = true) }
+            runCatching { trophyRepository.recordCompletion(state) }
+            launch {
+                runCatching { tournamentRepository.submitCompletion(state) }
             }
-            val submission = if (state.variant != null) {
-                ScoreSubmission.LocalOnly
-            } else {
-                submitScore(state).fold(
+            val submission = when {
+                state.dailyDate != null -> ScoreSubmission.Championship
+                state.variant != null -> ScoreSubmission.LocalOnly
+                else -> submitScore(state).fold(
                     onSuccess = { uploaded -> if (uploaded) ScoreSubmission.Submitted else ScoreSubmission.NotPersonalBest },
                     onFailure = { ScoreSubmission.Pending },
                 )
             }
             local.update { it.copy(scoreSubmission = submission) }
+            if (runCatching { reviewPrompt.onPuzzleCompleted() }.getOrDefault(false)) {
+                local.update { it.copy(showReviewPrompt = true) }
+            }
         }
     }
 

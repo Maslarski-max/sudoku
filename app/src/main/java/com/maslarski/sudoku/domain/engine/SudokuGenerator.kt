@@ -27,10 +27,11 @@ class SudokuGenerator(
         difficulty: Difficulty,
         seed: Long = Random.nextLong(),
         timeBudgetMillis: Long = defaultBudgetMillis(gridSize),
+        deterministic: Boolean = false,
     ): Puzzle {
         val random = Random(seed)
         val solution = fillGrid(gridSize, random)
-        val givens = carve(gridSize, difficulty, solution, random, timeBudgetMillis)
+        val givens = carve(gridSize, difficulty, solution, random, timeBudgetMillis, deterministic)
         return Puzzle(gridSize, difficulty, givens, solution, seed)
     }
 
@@ -119,18 +120,19 @@ class SudokuGenerator(
         solution: IntArray,
         random: Random,
         timeBudgetMillis: Long,
+        deterministic: Boolean,
     ): IntArray {
         val solver = SudokuSolver(gridSize)
         val grid = solution.copyOf()
         val targetEmpty = (gridSize.cellCount * difficulty.emptyFraction).toInt()
-        val deadline = timeSource() + timeBudgetMillis * 1_000_000L
+        val deadline = if (deterministic) Long.MAX_VALUE else timeSource() + timeBudgetMillis * 1_000_000L
         val nodeBudget = nodeBudgetFor(gridSize)
 
         var empty = 0
         val order = grid.indices.shuffled(random)
         for (index in order) {
             if (empty >= targetEmpty) break
-            if (timeSource() > deadline) break
+            if (!deterministic && timeSource() > deadline) break
             val removed = grid[index]
             grid[index] = 0
             // Cheap pre-check: if the removed cell has more than one candidate, the puzzle *might* be non-unique.

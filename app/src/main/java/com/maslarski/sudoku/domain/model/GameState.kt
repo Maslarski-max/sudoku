@@ -23,22 +23,29 @@ data class GameState(
     val lastCorrectElapsedMillis: Long? = null,
     val countedCells: Set<Int> = emptySet(),
     val iconMode: Boolean = false,
+    val dailyDate: String? = null,
 ) {
     val gridSize: GridSize get() = puzzle.gridSize
     val difficulty: Difficulty get() = puzzle.difficulty
     val variant: Variant? get() = puzzle.variant
     val topology: Topology get() = puzzle.topology
-    val slotId: Int get() = variant?.slotId ?: gridSize.size
+    val slotId: Int get() = if (dailyDate != null) DailyChallenge.SLOT_ID else variant?.slotId ?: gridSize.size
 
     fun valuesArray(): IntArray = IntArray(cells.size) { cells[it].value }
 
     companion object {
-        fun fromPuzzle(puzzle: Puzzle, nowEpochMillis: Long, iconMode: Boolean = false): GameState = GameState(
+        fun fromPuzzle(
+            puzzle: Puzzle,
+            nowEpochMillis: Long,
+            iconMode: Boolean = false,
+            dailyDate: String? = null,
+        ): GameState = GameState(
             puzzle = puzzle,
             cells = puzzle.givens.map { v -> Cell(value = v, isGiven = v != 0) },
             startedAtEpochMillis = nowEpochMillis,
-            iconMode = iconMode && puzzle.variant == null &&
+            iconMode = dailyDate == null && iconMode && puzzle.variant == null &&
                 (puzzle.gridSize == GridSize.NINE || puzzle.gridSize == GridSize.TWELVE),
+            dailyDate = dailyDate,
         )
     }
 }

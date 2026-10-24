@@ -4,14 +4,23 @@ import com.maslarski.sudoku.domain.engine.SudokuGenerator
 import com.maslarski.sudoku.domain.model.AppSettings
 import com.maslarski.sudoku.domain.model.AppTheme
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.DailyChallenge
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.GameRepository
+import com.maslarski.sudoku.domain.repository.DailyChallengeRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
 import com.maslarski.sudoku.domain.repository.SettingsRepository
+import com.maslarski.sudoku.domain.repository.TournamentRepository
+import com.maslarski.sudoku.domain.repository.TournamentPendingQueue
+import com.maslarski.sudoku.domain.repository.TrophyRepository
+import com.maslarski.sudoku.domain.model.TournamentBoard
+import com.maslarski.sudoku.domain.model.TournamentSnapshot
+import com.maslarski.sudoku.domain.model.Trophy
+import com.maslarski.sudoku.domain.time.EpochClock
 import com.maslarski.sudoku.domain.usecase.StartNewGameUseCase
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +52,10 @@ class HomeViewModelTest {
     private val games = FakeGameRepository()
     private val lives = FakeLivesRepository()
     private val settings = FakeHomeSettingsRepository()
+    private val daily = FakeDailyChallengeRepository()
+    private val tournaments = FakeHomeTournamentRepository()
+    private val trophies = FakeHomeTrophyRepository()
+    private val clock = EpochClock { 1_709_208_000_000L }
 
     @Before
     fun setUp() = Dispatchers.setMain(dispatcher)
@@ -55,6 +68,10 @@ class HomeViewModelTest {
         livesRepository = lives,
         settingsRepository = settings,
         startNewGame = StartNewGameUseCase(SudokuGenerator(), games, dispatcher),
+        dailyChallengeRepository = daily,
+        clock = clock,
+        tournamentRepository = tournaments,
+        trophyRepository = trophies,
     )
 
     private fun saveInProgress(gridSize: GridSize) {
@@ -312,6 +329,56 @@ class HomeViewModelTest {
         collector.cancel()
     }
 
+    @Test
+    fun `daily challenge starts a free medium puzzle in reserved slot with today's UTC date`() = runTest(dispatcher) {
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        val destinations = mutableListOf<Int>()
+        val navigation = backgroundScope.launch { vm.navigateToGame.collect(destinations::add) }
+        runCurrent()
+
+        vm.onDailyChallengeClicked()
+        runCurrent()
+
+        val game = games.dailySaved.value!!
+        assertEquals(DailyChallenge.dateStringAt(clock.now()), game.dailyDate)
+        assertEquals(DailyChallenge.SLOT_ID, game.slotId)
+        assertEquals(Difficulty.MEDIUM, game.difficulty)
+        assertFalse(game.iconMode)
+        assertEquals(0, lives.consumed)
+        assertEquals(listOf(DailyChallenge.SLOT_ID), destinations)
+        navigation.cancel()
+        collector.cancel()
+    }
+
+    @Test
+    fun `same day daily save continues and previous day replacement is free`() = runTest(dispatcher) {
+        val date = DailyChallenge.dateStringAt(clock.now())
+        val puzzle = SudokuGenerator().generate(GridSize.NINE, Difficulty.MEDIUM, seed = 12L, deterministic = true)
+        val saved = GameState.fromPuzzle(puzzle, nowEpochMillis = 0L, dailyDate = date)
+        games.dailySaved.value = saved
+        val vm = viewModel()
+        val collector = backgroundScope.launchCollect(vm)
+        val destinations = mutableListOf<Int>()
+        val navigation = backgroundScope.launch { vm.navigateToGame.collect(destinations::add) }
+        runCurrent()
+
+        vm.onDailyChallengeClicked()
+        runCurrent()
+        assertEquals(saved, games.dailySaved.value)
+        assertEquals(listOf(DailyChallenge.SLOT_ID), destinations)
+
+        games.dailySaved.value = saved.copy(dailyDate = "2024-02-28")
+        runCurrent()
+        vm.onDailyChallengeClicked()
+        runCurrent()
+        assertEquals(date, games.dailySaved.value?.dailyDate)
+        assertEquals(0, lives.consumed)
+        assertEquals(listOf(DailyChallenge.SLOT_ID, DailyChallenge.SLOT_ID), destinations)
+        navigation.cancel()
+        collector.cancel()
+    }
+
     private fun CoroutineScope.launchCollect(vm: HomeViewModel) = launch { vm.uiState.collect {} }
 }
 
@@ -319,7 +386,8 @@ private class FakeGameRepository : GameRepository {
     val saved = MutableStateFlow<Map<GridSize, GameState>>(emptyMap())
     val variantSaved = MutableStateFlow<Map<Int, GameState>>(emptyMap())
     val variantSummaries = MutableStateFlow<List<SavedGameSummary>>(emptyList())
-    override fun observeSavedGames(): Flow<List<SavedGameSummary>> = combine(saved, variantSaved, variantSummaries) { m, variants, summaries ->
+    val dailySaved = MutableStateFlow<GameState?>(null)
+    override fun observeSavedGames(): Flow<List<SavedGameSummary>> = combine(saved, variantSaved, variantSummaries, dailySaved) { m, variants, summaries, daily ->
         m.values.map {
             SavedGameSummary(
                 it.gridSize,
@@ -339,11 +407,21 @@ private class FakeGameRepository : GameRepository {
                 variant = it.variant,
                 iconMode = it.iconMode,
             )
-        } + summaries
+        } + summaries + listOfNotNull(daily?.let {
+            SavedGameSummary(
+                it.gridSize,
+                it.difficulty,
+                it.elapsedMillis,
+                0f,
+                it.lastPlayedEpochMillis,
+                dailyDate = it.dailyDate,
+            )
+        })
     }
     override suspend fun load(gridSize: GridSize): GameState? = saved.value[gridSize]
     override suspend fun loadSlot(slotId: Int): GameState? =
-        if (Variant.fromSlotId(slotId) != null) variantSaved.value[slotId]
+        if (slotId == DailyChallenge.SLOT_ID) dailySaved.value
+        else if (Variant.fromSlotId(slotId) != null) variantSaved.value[slotId]
         else GridSize.entries.firstOrNull { it.size == slotId }?.let { load(it) }
     var failNextSave = false
     override suspend fun save(state: GameState) {
@@ -351,14 +429,42 @@ private class FakeGameRepository : GameRepository {
             failNextSave = false
             throw IllegalStateException("disk full")
         }
-        if (state.variant == null) saved.update { it + (state.gridSize to state) }
+        if (state.dailyDate != null) dailySaved.value = state
+        else if (state.variant == null) saved.update { it + (state.gridSize to state) }
         else variantSaved.update { it + (state.slotId to state) }
     }
     override suspend fun delete(gridSize: GridSize) { saved.update { it - gridSize } }
     override suspend fun deleteSlot(slotId: Int) {
-        if (Variant.fromSlotId(slotId) != null) variantSaved.update { it - slotId }
+        if (slotId == DailyChallenge.SLOT_ID) dailySaved.value = null
+        else if (Variant.fromSlotId(slotId) != null) variantSaved.update { it - slotId }
         else GridSize.entries.firstOrNull { it.size == slotId }?.let { saved.update { map -> map - it } }
     }
+}
+
+private class FakeDailyChallengeRepository : DailyChallengeRepository {
+    override val stampedDates = MutableStateFlow<Set<String>>(emptySet())
+    override suspend fun recordStamp(date: String) {
+        stampedDates.update { it + date }
+    }
+}
+
+private class FakeHomeTournamentRepository : TournamentRepository {
+    override suspend fun submitCompletion(state: com.maslarski.sudoku.domain.model.GameState): Result<Unit> =
+        Result.success(Unit)
+    override suspend fun flushPending() = Unit
+    override suspend fun load(
+        board: TournamentBoard,
+        period: String,
+        limit: Int,
+        serverOnly: Boolean,
+    ): Result<TournamentSnapshot> =
+        Result.success(TournamentSnapshot(board, period, emptyList(), null))
+}
+
+private class FakeHomeTrophyRepository : TrophyRepository {
+    override val trophies: Flow<List<Trophy>> = kotlinx.coroutines.flow.flowOf(emptyList())
+    override suspend fun recordCompletion(state: GameState) = Unit
+    override suspend fun refreshPeriodAwards() = Unit
 }
 
 private class FakeLivesRepository : LivesRepository {

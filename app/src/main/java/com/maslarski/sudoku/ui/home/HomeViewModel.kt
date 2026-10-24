@@ -3,17 +3,24 @@ package com.maslarski.sudoku.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maslarski.sudoku.domain.model.Difficulty
+import com.maslarski.sudoku.domain.model.DailyChallenge
 import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.GameRepository
+import com.maslarski.sudoku.domain.repository.DailyChallengeRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
 import com.maslarski.sudoku.domain.repository.SettingsRepository
+import com.maslarski.sudoku.domain.repository.TournamentRepository
+import com.maslarski.sudoku.domain.repository.TrophyRepository
 import com.maslarski.sudoku.domain.usecase.StartNewGameUseCase
+import com.maslarski.sudoku.domain.time.EpochClock
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -40,6 +47,8 @@ data class HomeUiState(
     val replaceBlocked: Boolean = false,
     /** Set when generating or saving a new game threw; any charge has been refunded. */
     val startFailed: Boolean = false,
+    val todayDate: String = "",
+    val todayStamped: Boolean = false,
 ) {
     val selectedSlotId: Int get() = variant?.slotId ?: gridSize.size
     val savedForSelection: SavedGameSummary? get() = savedGames.firstOrNull { it.slotId == selectedSlotId }
@@ -51,12 +60,21 @@ class HomeViewModel @Inject constructor(
     private val livesRepository: LivesRepository,
     private val settingsRepository: SettingsRepository,
     private val startNewGame: StartNewGameUseCase,
+    private val dailyChallengeRepository: DailyChallengeRepository,
+    private val clock: EpochClock,
+    private val tournamentRepository: TournamentRepository,
+    private val trophyRepository: TrophyRepository,
 ) : ViewModel() {
 
     private val selection = MutableStateFlow(HomeUiState())
     private val iconModeOverride = MutableStateFlow<Boolean?>(null)
 
-    val uiState: StateFlow<HomeUiState> = combine(
+    init {
+        viewModelScope.launch { tournamentRepository.flushPending() }
+        viewModelScope.launch { trophyRepository.refreshPeriodAwards() }
+    }
+
+    private val baseUiState = combine(
         selection,
         gameRepository.observeSavedGames(),
         livesRepository.lives,
@@ -68,6 +86,21 @@ class HomeViewModel @Inject constructor(
             lives = lives,
             iconMode = iconMode ?: settings.iconMode,
         )
+    }
+
+    private val todayDate = flow {
+        while (true) {
+            emit(DailyChallenge.dateStringAt(clock.now()))
+            delay(60_000L)
+        }
+    }
+
+    val uiState: StateFlow<HomeUiState> = combine(
+        baseUiState,
+        dailyChallengeRepository.stampedDates,
+        todayDate,
+    ) { state, stamps, date ->
+        state.copy(todayDate = date, todayStamped = date in stamps)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     private val _navigateToGame = MutableSharedFlow<Int>(extraBufferCapacity = 1)
@@ -80,6 +113,35 @@ class HomeViewModel @Inject constructor(
     fun setIconMode(enabled: Boolean) {
         iconModeOverride.value = enabled
         viewModelScope.launch { settingsRepository.setIconMode(enabled) }
+    }
+
+    fun onDailyChallengeClicked() {
+        val date = DailyChallenge.dateStringAt(clock.now())
+        val current = uiState.value
+        if (current.todayStamped || current.generating) return
+        val saved = current.savedGames.firstOrNull { it.slotId == DailyChallenge.SLOT_ID }
+        if (saved?.dailyDate == date) {
+            _navigateToGame.tryEmit(DailyChallenge.SLOT_ID)
+            return
+        }
+        selection.update { it.copy(generating = true) }
+        viewModelScope.launch {
+            try {
+                startNewGame(
+                    gridSize = GridSize.NINE,
+                    difficulty = Difficulty.MEDIUM,
+                    iconMode = false,
+                    dailyDate = date,
+                )
+                _navigateToGame.emit(DailyChallenge.SLOT_ID)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                selection.update { it.copy(startFailed = true) }
+            } finally {
+                selection.update { it.copy(generating = false) }
+            }
+        }
     }
 
     fun onNewGameClicked() {

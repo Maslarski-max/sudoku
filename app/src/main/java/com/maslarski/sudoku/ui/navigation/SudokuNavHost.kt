@@ -11,6 +11,8 @@ import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.ui.game.GameScreen
 import com.maslarski.sudoku.ui.home.HomeScreen
 import com.maslarski.sudoku.ui.leaderboard.LeaderboardScreen
+import com.maslarski.sudoku.ui.leaderboard.TournamentsScreen
+import com.maslarski.sudoku.ui.leaderboard.TrophyRoomScreen
 import com.maslarski.sudoku.ui.store.StoreScreen
 import com.maslarski.sudoku.ui.settings.SettingsScreen
 
@@ -20,6 +22,8 @@ object Routes {
     const val LEADERBOARD = "leaderboard?gridSize={gridSize}&difficulty={difficulty}"
     const val STORE = "store"
     const val SETTINGS = "settings"
+    const val TOURNAMENTS = "tournaments"
+    const val TROPHY_ROOM = "trophy-room"
 
     fun game(slotId: Int) = "game/$slotId"
     fun leaderboard(gridSize: GridSize? = null, difficulty: Difficulty? = null) =
@@ -56,7 +60,20 @@ fun SudokuNavHost() {
                 navArgument("difficulty") { type = NavType.StringType; defaultValue = Difficulty.EASY.name },
             ),
         ) {
-            LeaderboardScreen(onBack = { navController.popBackStack() })
+            LeaderboardScreen(
+                onBack = { navController.popBackStack() },
+                onOpenTournaments = { navController.navigate(Routes.TOURNAMENTS) },
+                onOpenTrophyRoom = { navController.navigate(Routes.TROPHY_ROOM) },
+            )
+        }
+        composable(Routes.TOURNAMENTS) {
+            TournamentsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.TROPHY_ROOM) {
+            TrophyRoomScreen(
+                onBack = { navController.popBackStack() },
+                onOpenStore = { navController.navigate(Routes.STORE) },
+            )
         }
         composable(Routes.STORE) {
             StoreScreen(onBack = { navController.popBackStack() })
