@@ -19,12 +19,6 @@ enum class TournamentBoard(val collection: String) {
     fun currentPeriod(epochMillis: Long): String = periodAt(epochMillis)
 }
 
-data class PendingTournamentScore(
-    val board: TournamentBoard,
-    val period: String,
-    val points: Int,
-)
-
 data class TournamentEntry(
     val rank: Int?,
     val uid: String,

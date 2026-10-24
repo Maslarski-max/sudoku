@@ -164,7 +164,7 @@ private class AwardTournamentRepository(
         responses[key] = result
     }
 
-    override suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int) = Result.success(Unit)
+    override suspend fun submitCompletion(state: GameState) = Result.success(Unit)
     override suspend fun flushPending() = Unit
     override suspend fun load(
         board: TournamentBoard,

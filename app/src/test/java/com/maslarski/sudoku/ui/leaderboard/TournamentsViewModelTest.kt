@@ -56,7 +56,7 @@ class TournamentsViewModelTest {
 }
 
 private class FakeTournamentRepository : TournamentRepository {
-    override suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int) =
+    override suspend fun submitCompletion(state: com.maslarski.sudoku.domain.model.GameState) =
         Result.success(Unit)
 
     override suspend fun flushPending() = Unit

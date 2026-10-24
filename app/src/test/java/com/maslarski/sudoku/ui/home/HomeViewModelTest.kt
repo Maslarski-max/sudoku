@@ -17,7 +17,6 @@ import com.maslarski.sudoku.domain.repository.SettingsRepository
 import com.maslarski.sudoku.domain.repository.TournamentRepository
 import com.maslarski.sudoku.domain.repository.TournamentPendingQueue
 import com.maslarski.sudoku.domain.repository.TrophyRepository
-import com.maslarski.sudoku.domain.model.PendingTournamentScore
 import com.maslarski.sudoku.domain.model.TournamentBoard
 import com.maslarski.sudoku.domain.model.TournamentSnapshot
 import com.maslarski.sudoku.domain.model.Trophy
@@ -450,7 +449,7 @@ private class FakeDailyChallengeRepository : DailyChallengeRepository {
 }
 
 private class FakeHomeTournamentRepository : TournamentRepository {
-    override suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int): Result<Unit> =
+    override suspend fun submitCompletion(state: com.maslarski.sudoku.domain.model.GameState): Result<Unit> =
         Result.success(Unit)
     override suspend fun flushPending() = Unit
     override suspend fun load(

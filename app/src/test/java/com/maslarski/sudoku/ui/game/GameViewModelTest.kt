@@ -17,8 +17,8 @@ import com.maslarski.sudoku.domain.model.LeaderboardCategory
 import com.maslarski.sudoku.domain.model.LeaderboardEntry
 import com.maslarski.sudoku.domain.model.Lives
 import com.maslarski.sudoku.domain.model.Score
-import com.maslarski.sudoku.domain.model.TournamentBoard
 import com.maslarski.sudoku.domain.model.TournamentEntry
+import com.maslarski.sudoku.domain.model.TournamentBoard
 import com.maslarski.sudoku.domain.model.TournamentSnapshot
 import com.maslarski.sudoku.domain.model.Trophy
 import com.maslarski.sudoku.domain.repository.AuthRepository
@@ -633,25 +633,27 @@ class GameViewModelTest {
         assertTrue(submitted.timeMillis >= 1L)
         assertEquals(GridSize.NINE, submitted.gridSize)
         assertEquals(Difficulty.EASY, submitted.difficulty)
-        assertEquals(TournamentBoard.CHAMPIONSHIP, tournaments.records.single().first)
+        assertEquals(1, tournaments.completions.size)
+        assertNull(tournaments.completions.single().variant)
+        assertNull(tournaments.completions.single().dailyDate)
     }
 
     @Test
     fun `classic submit survives view model clearing while tournament write is suspended`() = vmTest {
-        val recordStarted = CompletableDeferred<Unit>()
-        val recordGate = CompletableDeferred<Unit>()
-        tournaments.recordStarted = recordStarted
-        tournaments.recordGate = recordGate
+        val submitStarted = CompletableDeferred<Unit>()
+        val submitGate = CompletableDeferred<Unit>()
+        tournaments.submitStarted = submitStarted
+        tournaments.submitGate = submitGate
 
         val vm = viewModel()
         settle()
         completeBoard(vm)
 
-        assertTrue(recordStarted.isCompleted)
+        assertTrue(submitStarted.isCompleted)
         assertEquals(1, leaderboard.submitted.size)
 
         store.clear()
-        recordGate.complete(Unit)
+        submitGate.complete(Unit)
         advanceUntilIdle()
 
         assertEquals(1, leaderboard.submitted.size)
@@ -664,8 +666,8 @@ class GameViewModelTest {
         val submitGate = CompletableDeferred<Unit>()
         leaderboard.submitStarted = submitStarted
         leaderboard.submitGate = submitGate
-        val recordStarted = CompletableDeferred<Unit>()
-        tournaments.recordStarted = recordStarted
+        val completionStarted = CompletableDeferred<Unit>()
+        tournaments.submitStarted = completionStarted
 
         val vm = viewModel()
         settle()
@@ -673,7 +675,7 @@ class GameViewModelTest {
 
         assertTrue(submitStarted.isCompleted)
         assertFalse(submitGate.isCompleted)
-        assertTrue(recordStarted.isCompleted)
+        assertTrue(completionStarted.isCompleted)
         assertEquals(1, leaderboard.submitted.size)
 
         submitGate.complete(Unit)
@@ -750,7 +752,8 @@ class GameViewModelTest {
         assertTrue(vm.uiState.value.game?.isComplete == true)
         assertEquals(ScoreSubmission.LocalOnly, vm.uiState.value.scoreSubmission)
         assertTrue(leaderboard.submitted.isEmpty())
-        assertEquals(listOf(TournamentBoard.CHAMPIONSHIP), tournaments.records.map { it.first })
+        assertEquals(1, tournaments.completions.size)
+        assertEquals(Variant.OUTSIDE, tournaments.completions.single().variant)
     }
 
     @Test
@@ -769,10 +772,8 @@ class GameViewModelTest {
 
         assertTrue(vm.uiState.value.game?.isComplete == true)
         assertTrue(leaderboard.submitted.isEmpty())
-        assertEquals(
-            setOf(TournamentBoard.ARENA, TournamentBoard.CHAMPIONSHIP),
-            tournaments.records.map { it.first }.toSet(),
-        )
+        assertEquals(1, tournaments.completions.size)
+        assertEquals(Variant.SAMURAI, tournaments.completions.single().variant)
     }
 
     @Test
@@ -794,7 +795,8 @@ class GameViewModelTest {
         assertEquals(ScoreSubmission.Championship, vm.uiState.value.scoreSubmission)
         assertTrue(leaderboard.submitted.isEmpty())
         assertEquals(date, trophies.completions.single().dailyDate)
-        assertEquals(listOf(TournamentBoard.CHAMPIONSHIP), tournaments.records.map { it.first })
+        assertEquals(1, tournaments.completions.size)
+        assertEquals(date, tournaments.completions.single().dailyDate)
     }
 
     private fun completeBoard(vm: GameViewModel) {
@@ -927,14 +929,14 @@ private class FakeLeaderboardRepository(
 private class FakeTournamentRepository(
     private val completionEvents: MutableList<String>,
 ) : TournamentRepository {
-    val records = mutableListOf<Triple<TournamentBoard, Long, Int>>()
-    var recordStarted: CompletableDeferred<Unit>? = null
-    var recordGate: CompletableDeferred<Unit>? = null
-    override suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int): Result<Unit> {
-        completionEvents += "tournament_${board.name}"
-        records += Triple(board, completedAtEpochMillis, points)
-        recordStarted?.complete(Unit)
-        recordGate?.await()
+    val completions = mutableListOf<GameState>()
+    var submitStarted: CompletableDeferred<Unit>? = null
+    var submitGate: CompletableDeferred<Unit>? = null
+    override suspend fun submitCompletion(state: GameState): Result<Unit> {
+        completionEvents += "tournament"
+        completions += state
+        submitStarted?.complete(Unit)
+        submitGate?.await()
         return Result.success(Unit)
     }
     override suspend fun flushPending() = Unit

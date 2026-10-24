@@ -49,6 +49,8 @@ android {
         buildConfigField("String", "FIREBASE_EMULATOR_HOST", "\"$emulatorHost\"")
         buildConfigField("int", "FIREBASE_AUTH_EMULATOR_PORT", "9099")
         buildConfigField("int", "FIREBASE_FIRESTORE_EMULATOR_PORT", "8080")
+        buildConfigField("int", "FIREBASE_FUNCTIONS_EMULATOR_PORT", "5001")
+        buildConfigField("int", "FIREBASE_FUNCTIONS_EMULATOR_PORT", "5001")
     }
 
     signingConfigs {
@@ -165,6 +167,8 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.functions)
+    implementation(libs.firebase.functions)
     implementation(libs.play.billing)
     implementation(libs.play.review)
 

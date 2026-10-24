@@ -12,7 +12,6 @@ import com.maslarski.sudoku.domain.model.GameRules
 import com.maslarski.sudoku.domain.model.GameState
 import com.maslarski.sudoku.domain.model.Hint
 import com.maslarski.sudoku.domain.model.Lives
-import com.maslarski.sudoku.domain.model.TournamentBoard
 import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.GameFeedback
 import com.maslarski.sudoku.domain.repository.GameRepository
@@ -447,19 +446,9 @@ class GameViewModel @Inject constructor(
         timerJob?.cancel()
         applicationScope.launch {
             gameRepository.save(state)
-            val completedAt = clock.now()
-            val points = ScoringRules.points(state)
             runCatching { trophyRepository.recordCompletion(state) }
-            val tournamentBoards = when {
-                state.dailyDate != null -> listOf(TournamentBoard.CHAMPIONSHIP)
-                state.variant == Variant.SAMURAI || state.variant == Variant.FLOWER ->
-                    listOf(TournamentBoard.ARENA, TournamentBoard.CHAMPIONSHIP)
-                else -> listOf(TournamentBoard.CHAMPIONSHIP)
-            }
             launch {
-                tournamentBoards.forEach { board ->
-                    runCatching { tournamentRepository.record(board, completedAt, points) }
-                }
+                runCatching { tournamentRepository.submitCompletion(state) }
             }
             val submission = when {
                 state.dailyDate != null -> ScoreSubmission.Championship

@@ -5,7 +5,6 @@ import com.maslarski.sudoku.domain.model.BillingEvent
 import com.maslarski.sudoku.domain.model.AppSettings
 import com.maslarski.sudoku.domain.model.AppTheme
 import com.maslarski.sudoku.domain.model.DailyChallenge
-import com.maslarski.sudoku.domain.model.PendingTournamentScore
 import com.maslarski.sudoku.domain.model.TournamentBoard
 import com.maslarski.sudoku.domain.model.TournamentSnapshot
 import com.maslarski.sudoku.domain.model.Trophy
@@ -41,13 +40,13 @@ interface DailyChallengeRepository {
 }
 
 interface TournamentPendingQueue {
-    suspend fun entries(): List<PendingTournamentScore>
-    suspend fun add(entry: PendingTournamentScore)
-    suspend fun remove(entry: PendingTournamentScore)
+    suspend fun entries(): List<String>
+    suspend fun add(payload: String)
+    suspend fun remove(payload: String)
 }
 
 interface TournamentRepository {
-    suspend fun record(board: TournamentBoard, completedAtEpochMillis: Long, points: Int): Result<Unit>
+    suspend fun submitCompletion(state: GameState): Result<Unit>
     suspend fun flushPending()
     suspend fun load(
         board: TournamentBoard,

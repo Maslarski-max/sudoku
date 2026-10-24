@@ -24,7 +24,7 @@ data class Score(
     )
 
     companion object {
-        fun displayNameFor(uid: String): String = "Player ${uid.takeLast(4).uppercase()}"
+        fun displayNameFor(uid: String): String = "Player ${uid.take(6).uppercase()}"
     }
 }
 

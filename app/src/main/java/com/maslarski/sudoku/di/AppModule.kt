@@ -10,6 +10,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.maslarski.sudoku.data.billing.PlayBillingRepository
 import com.maslarski.sudoku.data.feedback.DeviceGameFeedback
 import com.maslarski.sudoku.data.local.LeaderboardDao
@@ -117,6 +118,10 @@ object AppModule {
     @Provides
     @Singleton
     fun provideFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance()
+
+    @Provides
+    @Singleton
+    fun provideFirebaseFunctions(): FirebaseFunctions = FirebaseFunctions.getInstance("europe-west1")
 
     @Provides
     @Singleton
