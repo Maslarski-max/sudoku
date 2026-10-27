@@ -1,17 +1,26 @@
 """Renders the Sudoku icon: the 512x512 Play Store icon and the adaptive launcher foreground for each density.
 
-Usage: python3 tools/generate_icons.py [--play]   (requires Pillow and DejaVu Sans Bold)
+Usage: python3 tools/generate_icons.py [--play]   (requires Pillow and DejaVu Sans Bold;
+set SUDOKU_ICON_FONT=/path/to/DejaVuSans-Bold.ttf if it is not in a standard font directory)
 --play also rewrites app/src/main/ic_launcher-playstore.png (already uploaded to Play Console).
 """
-from pathlib import Path
-
+import os
 import sys
+from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
 RES = ROOT / "app/src/main/res"
-FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+FONT_CANDIDATES = [
+    os.environ.get("SUDOKU_ICON_FONT", ""),
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+    "/Library/Fonts/DejaVuSans-Bold.ttf",
+    str(Path.home() / "Library/Fonts/DejaVuSans-Bold.ttf"),
+    "C:/Windows/Fonts/DejaVuSans-Bold.ttf",
+    str(Path.home() / "AppData/Local/Microsoft/Windows/Fonts/DejaVuSans-Bold.ttf"),
+]
 SUPERSAMPLE = 4
 
 CYAN, PINK = (0x00, 0xE5, 0xFF, 255), (0xFF, 0x2B, 0xD6, 255)
@@ -25,6 +34,13 @@ LAUNCHER_GRID_MARGIN = 0.295
 DENSITIES = {"mdpi": 108, "hdpi": 162, "xhdpi": 216, "xxhdpi": 324, "xxxhdpi": 432}
 
 
+def font_path():
+    for candidate in FONT_CANDIDATES:
+        if candidate and Path(candidate).is_file():
+            return candidate
+    sys.exit("DejaVu Sans Bold not found; install it or set SUDOKU_ICON_FONT to its .ttf path.")
+
+
 def gradient(size, c1, c2):
     vertical = Image.linear_gradient("L").resize((size, size))
     ramp = ImageChops.add(vertical, vertical.rotate(90), scale=2.0)
@@ -36,7 +52,7 @@ def render(size, margin):
     g0, g1 = int(s * margin), s - int(s * margin)
     cell = (g1 - g0) / 3
     thick = int((g1 - g0) * 0.0355)
-    font = ImageFont.truetype(FONT, int(cell * 0.6))
+    font = ImageFont.truetype(font_path(), int(cell * 0.6))
 
     def box(r, c):
         return g0 + c * cell, g0 + r * cell, g0 + (c + 1) * cell, g0 + (r + 1) * cell
