@@ -12,6 +12,13 @@ class DisplayNameRulesTest {
     }
 
     @Test
+    fun `normalizes JavaScript whitespace characters`() {
+        assertEquals("Max Smith", DisplayNameRules.normalize("Max\u00A0Smith"))
+        assertNull(DisplayNameRules.validate("Max\u00A0Smith"))
+        assertEquals("Max 99", DisplayNameRules.normalize("\uFEFFMax\u3000\u3000 99"))
+    }
+
+    @Test
     fun `counts normalized Unicode code points`() {
         assertEquals(DisplayNameError.LENGTH, DisplayNameRules.validate("ab"))
         assertNull(DisplayNameRules.validate("abc"))

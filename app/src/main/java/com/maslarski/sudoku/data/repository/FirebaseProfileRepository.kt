@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,6 +45,7 @@ class FirebaseProfileRepository @Inject constructor(
     private val dataStore: DataStore<Preferences>,
     private val leaderboardDao: LeaderboardDao,
 ) : ProfileRepository {
+    private val nameRevision = AtomicLong()
 
     override val displayName: Flow<String?> = dataStore.data.map { preferences ->
         val uid = authRepository.currentUserId
@@ -72,14 +74,17 @@ class FirebaseProfileRepository @Inject constructor(
                 if (preferences[KEY_UID] != uid) preferences.remove(KEY_DISPLAY_NAME)
                 preferences[KEY_UID] = uid
             }
+            val startRevision = nameRevision.get()
             val snapshot = withTimeout(NETWORK_TIMEOUT_MILLIS) {
-                firestore.collection(COLLECTION_PLAYERS).document(uid).get().await()
+                firestore.collection(COLLECTION_PROFILES).document(uid).get().await()
             }
             val name = snapshot.getString(FIELD_DISPLAY_NAME)
             dataStore.edit { preferences ->
                 preferences[KEY_UID] = uid
-                if (name == null) preferences.remove(KEY_DISPLAY_NAME)
-                else preferences[KEY_DISPLAY_NAME] = name
+                if (nameRevision.get() == startRevision) {
+                    if (name == null) preferences.remove(KEY_DISPLAY_NAME)
+                    else preferences[KEY_DISPLAY_NAME] = name
+                }
             }
         } catch (error: CancellationException) {
             if (error is TimeoutCancellationException) return
@@ -115,6 +120,7 @@ class FirebaseProfileRepository @Inject constructor(
             }
             val returnedName = (result.data as? Map<*, *>)?.get(FIELD_DISPLAY_NAME) as? String ?: name
             dataStore.edit { preferences ->
+                nameRevision.incrementAndGet()
                 preferences[KEY_UID] = uid
                 preferences[KEY_DISPLAY_NAME] = returnedName
             }
@@ -136,7 +142,7 @@ class FirebaseProfileRepository @Inject constructor(
     private companion object {
         const val NETWORK_TIMEOUT_MILLIS = 15_000L
         const val CALLABLE_NAME = "setDisplayName"
-        const val COLLECTION_PLAYERS = "players"
+        const val COLLECTION_PROFILES = "profiles"
         const val FIELD_DISPLAY_NAME = "displayName"
         val KEY_UID = stringPreferencesKey("profile_uid")
         val KEY_DISPLAY_NAME = stringPreferencesKey("profile_display_name")

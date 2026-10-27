@@ -13,8 +13,8 @@ service cloud.firestore {
 
     function isAllowedName(name) {
       return name == 'Player ' + request.auth.uid[0:6].upper()
-        || (exists(/databases/$(database)/documents/players/$(request.auth.uid))
-          && get(/databases/$(database)/documents/players/$(request.auth.uid)).data.get('displayName', '') == name);
+        || (exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+          && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('displayName', '') == name);
     }
 
     function isValidScore(data, category) {
@@ -64,8 +64,9 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /players/{uid} {
+    match /profiles/{uid} {
       allow read: if isSignedIn() && uid == request.auth.uid;
+      allow write: if false;
     }
 
     match /players/{document=**} {

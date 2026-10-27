@@ -17,12 +17,12 @@ object DisplayNameRules {
 
     private val allowedCharacters = Regex("^[\\p{L}\\p{N}][\\p{L}\\p{M}\\p{N} _.\\-]*$")
     private val reservedName = Regex("^player\\b", RegexOption.IGNORE_CASE)
-    private val whitespace = Regex("\\s+")
+    private val whitespace = Regex("[\\t\\n\\u000B\\f\\r\\p{Z}\\uFEFF]+")
 
     fun normalize(raw: String): String =
         Normalizer.normalize(raw, Normalizer.Form.NFC)
-            .trim()
             .replace(whitespace, " ")
+            .trim()
 
     fun validate(raw: String): DisplayNameError? {
         val name = normalize(raw)

@@ -12,6 +12,7 @@ function expectReason(raw, reason) {
 
 test("trims and collapses whitespace", () => {
   assert.equal(normalizeDisplayName("  Max   99 "), "Max 99");
+  assert.equal(normalizeDisplayName("Max\u00A0Smith"), "Max Smith");
 });
 
 test("builds the default display name from the first six uid characters", () => {
