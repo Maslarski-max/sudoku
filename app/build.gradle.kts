@@ -50,7 +50,6 @@ android {
         buildConfigField("int", "FIREBASE_AUTH_EMULATOR_PORT", "9099")
         buildConfigField("int", "FIREBASE_FIRESTORE_EMULATOR_PORT", "8080")
         buildConfigField("int", "FIREBASE_FUNCTIONS_EMULATOR_PORT", "5001")
-        buildConfigField("int", "FIREBASE_FUNCTIONS_EMULATOR_PORT", "5001")
     }
 
     signingConfigs {
