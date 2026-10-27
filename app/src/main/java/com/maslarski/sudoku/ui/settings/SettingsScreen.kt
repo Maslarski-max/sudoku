@@ -22,17 +22,21 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -40,9 +44,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,11 +58,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maslarski.sudoku.BuildConfig
 import com.maslarski.sudoku.R
+import com.maslarski.sudoku.domain.model.DisplayNameError
+import com.maslarski.sudoku.domain.model.DisplayNameRules
 import com.maslarski.sudoku.domain.model.GridSize
 import com.maslarski.sudoku.domain.model.AppTheme
 import com.maslarski.sudoku.ui.theme.ThemeSwatchColors
@@ -70,6 +81,8 @@ fun SettingsScreen(
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val unlimited by viewModel.unlimited.collectAsStateWithLifecycle()
+    val displayName by viewModel.displayName.collectAsStateWithLifecycle()
+    val nameEdit by viewModel.nameEdit.collectAsStateWithLifecycle()
     val selectedTheme = settings.theme.effective(unlimited)
     val context = LocalContext.current
     val shareText = stringResource(
@@ -79,6 +92,7 @@ fun SettingsScreen(
     val shareTitle = stringResource(R.string.settings_share_title)
     var showHowToPlay by remember { mutableStateOf(false) }
     var showPrivacyPolicy by remember { mutableStateOf(false) }
+    var showEditName by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -95,6 +109,13 @@ fun SettingsScreen(
         Column(
         modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
         ) {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_your_name)) },
+                supportingContent = { Text(displayName ?: stringResource(R.string.settings_name_loading)) },
+                leadingContent = { Icon(Icons.Default.Person, contentDescription = null) },
+                trailingContent = { Icon(Icons.Default.Edit, contentDescription = null) },
+                modifier = Modifier.clickable { showEditName = true },
+            )
             Text(
                 stringResource(R.string.settings_themes),
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
@@ -206,6 +227,25 @@ fun SettingsScreen(
         )
     }
 
+    if (showEditName) {
+        EditNameDialog(
+            initialName = displayName.orEmpty(),
+            state = nameEdit,
+            onSave = viewModel::saveName,
+            onClearError = viewModel::resetNameEdit,
+            onCancel = {
+                showEditName = false
+                viewModel.resetNameEdit()
+            },
+        )
+        LaunchedEffect(nameEdit.saved) {
+            if (nameEdit.saved) {
+                showEditName = false
+                viewModel.resetNameEdit()
+            }
+        }
+    }
+
     if (showPrivacyPolicy) {
         Dialog(
             onDismissRequest = { showPrivacyPolicy = false },
@@ -233,6 +273,88 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+@Composable
+private fun EditNameDialog(
+    initialName: String,
+    state: NameEditState,
+    onSave: (String) -> Unit,
+    onClearError: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    var name by remember { mutableStateOf(initialName) }
+    val validationError = DisplayNameRules.validate(name)
+    val errorMessage = (state.error ?: validationError)?.let { error ->
+        stringResource(
+            when (error) {
+                DisplayNameError.LENGTH -> R.string.settings_name_error_length
+                DisplayNameError.CHARACTERS -> R.string.settings_name_error_characters
+                DisplayNameError.RESERVED -> R.string.settings_name_error_reserved
+                DisplayNameError.BLOCKED -> R.string.settings_name_error_blocked
+                DisplayNameError.RATE_LIMIT -> R.string.settings_name_error_rate_limit
+                DisplayNameError.NETWORK -> R.string.settings_name_error_network
+            },
+        )
+    }
+    val normalizedName = DisplayNameRules.normalize(name)
+    val nameLength = normalizedName.codePointCount(0, normalizedName.length)
+
+    AlertDialog(
+        onDismissRequest = { if (!state.saving) onCancel() },
+        title = { Text(stringResource(R.string.settings_edit_name)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = {
+                    name = it
+                    if (state.error != null) onClearError()
+                },
+                enabled = !state.saving,
+                singleLine = true,
+                isError = errorMessage != null || validationError != null,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Words,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (!state.saving && validationError == null) onSave(name)
+                    },
+                ),
+                supportingText = {
+                    Column {
+                        Text(
+                            errorMessage ?: stringResource(R.string.settings_edit_name_hint),
+                            color = if (errorMessage != null) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            stringResource(R.string.settings_edit_name_count, nameLength),
+                            modifier = Modifier.align(Alignment.End),
+                        )
+                    }
+                },
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !state.saving && validationError == null,
+                onClick = { onSave(name) },
+            ) {
+                if (state.saving) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(stringResource(R.string.settings_save))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel, enabled = !state.saving) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
 }
 
 @Composable
