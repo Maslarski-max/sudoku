@@ -12,6 +12,7 @@ import com.maslarski.sudoku.domain.model.Variant
 import com.maslarski.sudoku.domain.repository.AuthRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
+import com.maslarski.sudoku.domain.repository.ProfileRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -71,6 +72,7 @@ class StartNewGameUseCase @Inject constructor(
 class SubmitScoreUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val leaderboardRepository: LeaderboardRepository,
+    private val profileRepository: ProfileRepository,
 ) {
     /** Returns true when the score reached the remote leaderboard. */
     suspend operator fun invoke(state: GameState): Result<Boolean> = runCatching {
@@ -78,7 +80,7 @@ class SubmitScoreUseCase @Inject constructor(
         val uid = runCatching { authRepository.ensureSignedIn() }.getOrDefault("")
         val score = Score(
             uid = uid,
-            displayName = Score.displayNameFor(uid),
+            displayName = if (uid.isEmpty()) Score.displayNameFor(uid) else profileRepository.displayNameFor(uid),
             gridSize = state.gridSize,
             difficulty = state.difficulty,
             timeMillis = state.elapsedMillis.coerceAtLeast(1L),

@@ -24,6 +24,7 @@ import com.maslarski.sudoku.data.repository.FirestoreTournamentRepository
 import com.maslarski.sudoku.data.repository.DataStoreReviewPromptRepository
 import com.maslarski.sudoku.data.repository.DataStoreSettingsRepository
 import com.maslarski.sudoku.data.repository.FirebaseAuthRepository
+import com.maslarski.sudoku.data.repository.FirebaseProfileRepository
 import com.maslarski.sudoku.data.repository.FirestoreLeaderboardRepository
 import com.maslarski.sudoku.data.repository.RoomGameRepository
 import com.maslarski.sudoku.data.time.SystemEpochClock
@@ -39,6 +40,7 @@ import com.maslarski.sudoku.domain.repository.TrophyRepository
 import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.GameFeedback
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
+import com.maslarski.sudoku.domain.repository.ProfileRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
 import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import com.maslarski.sudoku.domain.repository.SettingsRepository
@@ -145,6 +147,7 @@ abstract class RepositoryModule {
     @Binds abstract fun bindSettingsRepository(impl: DataStoreSettingsRepository): SettingsRepository
     @Binds abstract fun bindGameFeedback(impl: DeviceGameFeedback): GameFeedback
     @Binds abstract fun bindAuthRepository(impl: FirebaseAuthRepository): AuthRepository
+    @Binds abstract fun bindProfileRepository(impl: FirebaseProfileRepository): ProfileRepository
     @Binds abstract fun bindLeaderboardRepository(impl: FirestoreLeaderboardRepository): LeaderboardRepository
     @Binds abstract fun bindBillingRepository(impl: PlayBillingRepository): BillingRepository
     @Binds abstract fun bindDailyChallengeRepository(impl: DataStoreDailyChallengeRepository): DailyChallengeRepository

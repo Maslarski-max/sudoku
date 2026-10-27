@@ -14,6 +14,7 @@ import com.maslarski.sudoku.domain.model.LeaderboardEntry
 import com.maslarski.sudoku.domain.model.Score
 import com.maslarski.sudoku.domain.repository.AuthRepository
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
+import com.maslarski.sudoku.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
@@ -21,6 +22,9 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
+
+internal suspend fun Score.withCurrentDisplayName(profileRepository: ProfileRepository): Score =
+    copy(displayName = profileRepository.displayNameFor(uid))
 
 /**
  * Firestore layout: `leaderboards/{gridSize}_{DIFFICULTY}/scores/{uid}` — one best score per player
@@ -31,6 +35,7 @@ import javax.inject.Singleton
 class FirestoreLeaderboardRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val authRepository: AuthRepository,
+    private val profileRepository: ProfileRepository,
     private val dao: LeaderboardDao,
 ) : LeaderboardRepository {
 
@@ -97,18 +102,19 @@ class FirestoreLeaderboardRepository @Inject constructor(
             if (score.isBetterThan(pendingBest)) dao.upsertPending(score.toPending())
             error("Not signed in; score queued for upload")
         }
-        if (!score.isBetterThan(pendingBest)) return@runCatching false
+        val uploadScore = score.withCurrentDisplayName(profileRepository)
+        if (!uploadScore.isBetterThan(pendingBest)) return@runCatching false
         val localBest = dao.get(category.id, score.uid)?.toScore()
-        if (!score.isBetterThan(localBest)) return@runCatching false
+        if (!uploadScore.isBetterThan(localBest)) return@runCatching false
 
         // Optimistically cache so the UI reflects the new best immediately.
-        dao.upsertAll(listOf(score.toCache()))
+        dao.upsertAll(listOf(uploadScore.toCache()))
 
-        val docRef = scores(category).document(score.uid)
+        val docRef = scores(category).document(uploadScore.uid)
         val uploaded = runCatching {
             val remote = docRef.get().awaitNetwork()
             val remoteBest = remote.takeIf { it.exists() }?.let { doc ->
-                score.copy(
+                uploadScore.copy(
                     points = doc.getLong(FIELD_POINTS)?.toInt() ?: 0,
                     timeMillis = doc.getLong(FIELD_TIME) ?: Long.MAX_VALUE,
                     moves = doc.getLong(FIELD_MOVES)?.toInt() ?: Int.MAX_VALUE,
@@ -121,16 +127,16 @@ class FirestoreLeaderboardRepository @Inject constructor(
                 remoteBest?.let { dao.upsertAll(listOf(it.toCache())) }
                 return@runCatching false
             }
-            docRef.set(score.toDocument()).awaitNetwork()
+            docRef.set(uploadScore.toDocument()).awaitNetwork()
             true
         }.getOrElse { error ->
             // Rules rejected it (not an improvement server-side): nothing to retry. Otherwise queue for later.
             if (error.isPermissionDenied()) return@runCatching false
-            dao.upsertPending(score.toPending())
+            dao.upsertPending(uploadScore.toPending())
             throw error
         }
         if (uploaded) {
-            dao.deletePending(category.id, score.uid)
+            dao.deletePending(category.id, uploadScore.uid)
             dao.deletePending(category.id, ANONYMOUS_UID)
         }
         uploaded
@@ -148,15 +154,16 @@ class FirestoreLeaderboardRepository @Inject constructor(
             val stored = pending.toScore()
             val score = if (stored.isAnonymous) {
                 val uid = authRepository.currentUserId ?: continue
-                stored.copy(uid = uid, displayName = Score.displayNameFor(uid))
+                stored.copy(uid = uid)
             } else {
                 stored
             }
-            val docRef = scores(score.category).document(score.uid)
-            runCatching { docRef.set(score.toDocument()).awaitNetwork() }
+            val uploadScore = score.withCurrentDisplayName(profileRepository)
+            val docRef = scores(uploadScore.category).document(uploadScore.uid)
+            runCatching { docRef.set(uploadScore.toDocument()).awaitNetwork() }
                 .onSuccess {
                     dao.deletePending(pending.category, pending.uid)
-                    dao.upsertAll(listOf(score.toCache()))
+                    dao.upsertAll(listOf(uploadScore.toCache()))
                 }
                 .onFailure { if (it.isPermissionDenied()) dao.deletePending(pending.category, pending.uid) }
         }

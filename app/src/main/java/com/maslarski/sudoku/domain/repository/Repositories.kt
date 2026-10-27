@@ -112,6 +112,14 @@ interface AuthRepository {
     val currentUserId: String?
 }
 
+interface ProfileRepository {
+    /** Name shown on leaderboards: the custom nickname or the default "Player XXXXXX"; null until signed in. */
+    val displayName: Flow<String?>
+    suspend fun displayNameFor(uid: String): String
+    suspend fun setDisplayName(raw: String): Result<String>
+    suspend fun refresh()
+}
+
 interface LeaderboardRepository {
     /** Cached-then-network stream of the top entries for a category. */
     fun observeTop(category: LeaderboardCategory, limit: Int = 50): Flow<List<LeaderboardEntry>>

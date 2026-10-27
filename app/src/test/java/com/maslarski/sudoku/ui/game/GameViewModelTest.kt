@@ -2,6 +2,7 @@ package com.maslarski.sudoku.ui.game
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
+import com.maslarski.sudoku.data.repository.withCurrentDisplayName
 import com.maslarski.sudoku.domain.engine.GameEngine
 import com.maslarski.sudoku.domain.engine.HintEngine
 import com.maslarski.sudoku.domain.engine.SudokuGenerator
@@ -26,6 +27,7 @@ import com.maslarski.sudoku.domain.repository.GameRepository
 import com.maslarski.sudoku.domain.repository.GameFeedback
 import com.maslarski.sudoku.domain.repository.LeaderboardRepository
 import com.maslarski.sudoku.domain.repository.LivesRepository
+import com.maslarski.sudoku.domain.repository.ProfileRepository
 import com.maslarski.sudoku.domain.repository.ReviewPromptRepository
 import com.maslarski.sudoku.domain.repository.SavedGameSummary
 import com.maslarski.sudoku.domain.repository.SettingsRepository
@@ -71,6 +73,7 @@ class GameViewModelTest {
     private val reviewPrompt = FakeReviewPromptRepository()
     private val feedback = RecordingGameFeedback()
     private val settings = FakeSettingsRepository()
+    private val profile = FakeProfileRepository()
     private var clockOffsetMillis = 0L
     private val clock = EpochClock {
         1_700_000_000_000L + dispatcher.scheduler.currentTime + clockOffsetMillis
@@ -100,7 +103,7 @@ class GameViewModelTest {
     }
 
     private fun viewModel(
-        submitScore: SubmitScoreUseCase = SubmitScoreUseCase(FakeAuthRepository(), leaderboard),
+        submitScore: SubmitScoreUseCase = SubmitScoreUseCase(FakeAuthRepository(), leaderboard, profile),
         slotId: Int = GridSize.NINE.size,
     ) = GameViewModel(
         savedStateHandle = SavedStateHandle(mapOf("gridSize" to slotId)),
@@ -709,13 +712,41 @@ class GameViewModelTest {
     @Test
     fun `sign-in failure still queues an anonymous score for upload`() = vmTest {
         leaderboard.result = Result.failure(IOException("queued"))
-        val vm = viewModel(submitScore = SubmitScoreUseCase(FailingAuthRepository(), leaderboard))
+        val vm = viewModel(submitScore = SubmitScoreUseCase(FailingAuthRepository(), leaderboard, profile))
         settle()
         completeBoard(vm)
         assertEquals(ScoreSubmission.Pending, vm.uiState.value.scoreSubmission)
         val submitted = leaderboard.submitted.single()
         assertTrue(submitted.isAnonymous)
         assertTrue(submitted.points > 0)
+    }
+
+    @Test
+    fun `score submission uses the current profile name`() = vmTest {
+        val customProfile = FakeProfileRepository("Max 99")
+        val submitScore = SubmitScoreUseCase(FakeAuthRepository(), leaderboard, customProfile)
+
+        assertTrue(submitScore(initial).isSuccess)
+        assertEquals("Max 99", leaderboard.submitted.single().displayName)
+    }
+
+    @Test
+    fun `pending score is stamped with the current profile name before upload`() = vmTest {
+        val pending = Score(
+            uid = "test-user-1234",
+            displayName = "Player TEST-U",
+            gridSize = GridSize.NINE,
+            difficulty = Difficulty.EASY,
+            timeMillis = 10_000L,
+            moves = 40,
+            mistakes = 0,
+            points = 500,
+            completedAtEpochMillis = 0L,
+        )
+
+        val uploadScore = pending.withCurrentDisplayName(FakeProfileRepository("Max 99"))
+
+        assertEquals("Max 99", uploadScore.displayName)
     }
 
     @Test
@@ -905,6 +936,15 @@ private class FakeAuthRepository : AuthRepository {
 private class FailingAuthRepository : AuthRepository {
     override val currentUserId: String? = null
     override suspend fun ensureSignedIn(): String = throw IOException("auth unreachable")
+}
+
+private class FakeProfileRepository(
+    private val customName: String? = null,
+) : ProfileRepository {
+    override val displayName: Flow<String?> = flowOf(customName)
+    override suspend fun displayNameFor(uid: String): String = customName ?: Score.displayNameFor(uid)
+    override suspend fun setDisplayName(raw: String): Result<String> = Result.success(raw)
+    override suspend fun refresh() = Unit
 }
 
 private class FakeLeaderboardRepository(

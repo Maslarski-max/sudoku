@@ -199,6 +199,18 @@
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
+    <string name="settings_your_name">Your name</string>
+    <string name="settings_edit_name">Edit name</string>
+    <string name="settings_name_loading">…</string>
+    <string name="settings_edit_name_hint">3–20 letters or numbers. Shown on leaderboards and tournaments.</string>
+    <string name="settings_edit_name_count">%1$d/20</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_name_error_length">Use 3–20 characters.</string>
+    <string name="settings_name_error_characters">Use letters, numbers, spaces, . _ or -, starting with a letter or number.</string>
+    <string name="settings_name_error_reserved">Names starting with “Player” are reserved.</string>
+    <string name="settings_name_error_blocked">That name isn\'t allowed. Please choose another.</string>
+    <string name="settings_name_error_rate_limit">Please wait a moment before changing your name again.</string>
+    <string name="settings_name_error_network">Couldn\'t save. Check your connection and try again.</string>
     <string name="settings_share">Share</string>
     <string name="settings_share_title">Share Sudoku</string>
     <string name="settings_share_text">Play Sudoku with me — 9×9 to 18×18 grids, global leaderboards and 100%% ad-free: %1$s</string>
@@ -243,7 +255,7 @@
     <string name="icon_winter_hat">Winter hat</string>
     <string name="icon_star">Star</string>
     <string name="theme_included_with_unlimited">Included with Unlimited Lives</string>
-    <string name="privacy_policy_text" formatted="false">Sudoku is 100% ad-free and contains no advertising or analytics SDKs.&#10;&#10;What we collect: to run the global leaderboards the app signs you in with Firebase Anonymous Authentication, which creates a random user ID. When you finish a puzzle, your score (grid size, difficulty, points, time, moves, mistakes, completion date) and an automatically generated display name are stored in Google Cloud Firestore. We do not collect your name, email address, contacts, location or photos.&#10;&#10;Purchases: in-app purchases are processed by Google Play. We never see or store your payment details.&#10;&#10;On your device: game progress, lives, purchases status and settings are stored locally and are removed when you clear the app\'s data or uninstall it.&#10;&#10;Third parties: Google Firebase and Google Play process data under Google\'s privacy policy (https://policies.google.com/privacy), which may include device and network information needed for security and reliability.&#10;&#10;Children: the app does not knowingly collect personal information from children.&#10;&#10;Contact: to ask a question or request deletion of your leaderboard data, use the developer email shown on the app\'s Google Play page.</string>
+    <string name="privacy_policy_text" formatted="false">Sudoku is 100% ad-free and contains no advertising or analytics SDKs.&#10;&#10;What we collect: to run the global leaderboards the app signs you in with Firebase Anonymous Authentication, which creates a random user ID. When you finish a puzzle, your score (grid size, difficulty, points, time, moves, mistakes, completion date) and an automatically generated display name are stored in Google Cloud Firestore; you may optionally replace the automatic name with a nickname of your choice, which is shown publicly on leaderboards and tournaments. We do not collect your name, email address, contacts, location or photos.&#10;&#10;Purchases: in-app purchases are processed by Google Play. We never see or store your payment details.&#10;&#10;On your device: game progress, lives, purchases status and settings are stored locally and are removed when you clear the app\'s data or uninstall it.&#10;&#10;Third parties: Google Firebase and Google Play process data under Google\'s privacy policy (https://policies.google.com/privacy), which may include device and network information needed for security and reliability.&#10;&#10;Children: the app does not knowingly collect personal information from children.&#10;&#10;Contact: to ask a question or request deletion of your leaderboard data, use the developer email shown on the app\'s Google Play page.</string>
 
     <!-- Misc -->
     <string name="cancel">Cancel</string>

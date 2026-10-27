@@ -53,4 +53,16 @@ interface LeaderboardDao {
 
     @Query("DELETE FROM pending_scores WHERE category = :category AND uid = :uid")
     suspend fun deletePending(category: String, uid: String)
+
+    @Query("UPDATE leaderboard_cache SET displayName = :name WHERE uid = :uid")
+    suspend fun renameCachedUser(uid: String, name: String)
+
+    @Query("UPDATE pending_scores SET displayName = :name WHERE uid = :uid")
+    suspend fun renamePendingUser(uid: String, name: String)
+
+    @Transaction
+    suspend fun renameUser(uid: String, name: String) {
+        renameCachedUser(uid, name)
+        renamePendingUser(uid, name)
+    }
 }

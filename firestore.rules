@@ -11,10 +11,16 @@ service cloud.firestore {
       return category.matches('^(9|12|15|18)_(EASY|MEDIUM|HARD)$');
     }
 
+    function isAllowedName(name) {
+      return name == 'Player ' + request.auth.uid[0:6].upper()
+        || (exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+          && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('displayName', '') == name);
+    }
+
     function isValidScore(data, category) {
       return data.keys().hasOnly(['uid', 'displayName', 'gridSize', 'difficulty', 'timeMillis', 'moves', 'mistakes', 'points', 'completedAt'])
         && data.uid is string && data.uid == request.auth.uid
-        && data.displayName is string && data.displayName.size() <= 32
+        && data.displayName is string && isAllowedName(data.displayName)
         && data.gridSize is int && data.gridSize in [9, 12, 15, 18]
         && data.difficulty is string && data.difficulty in ['EASY', 'MEDIUM', 'HARD']
         && (string(data.gridSize) + '_' + data.difficulty) == category
@@ -55,6 +61,11 @@ service cloud.firestore {
 
     match /championship/{period}/scores/{uid} {
       allow read: if isSignedIn() && period.matches('^\\d{4}$');
+      allow write: if false;
+    }
+
+    match /profiles/{uid} {
+      allow read: if isSignedIn() && uid == request.auth.uid;
       allow write: if false;
     }
 
