@@ -114,7 +114,12 @@ fun SettingsScreen(
                 supportingContent = { Text(displayName ?: stringResource(R.string.settings_name_loading)) },
                 leadingContent = { Icon(Icons.Default.Person, contentDescription = null) },
                 trailingContent = { Icon(Icons.Default.Edit, contentDescription = null) },
-                modifier = Modifier.clickable(enabled = displayName != null) { showEditName = true },
+                modifier = Modifier.clickable(
+                    onClick = {
+                        if (displayName != null) showEditName = true
+                        else viewModel.refreshProfile()
+                    },
+                ),
             )
             Text(
                 stringResource(R.string.settings_themes),

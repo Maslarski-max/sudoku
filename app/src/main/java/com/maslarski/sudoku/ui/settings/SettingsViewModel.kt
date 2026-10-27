@@ -42,6 +42,10 @@ class SettingsViewModel @Inject constructor(
     val nameEdit: StateFlow<NameEditState> = mutableNameEdit.asStateFlow()
 
     init {
+        refreshProfile()
+    }
+
+    fun refreshProfile() {
         viewModelScope.launch { profileRepository.refresh() }
     }
 
