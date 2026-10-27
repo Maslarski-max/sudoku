@@ -17,3 +17,10 @@
 
 # Play In-App Review (review-ktx) references a compile-only GMS annotation.
 -dontwarn com.google.android.gms.common.annotation.NoNullnessRewrite
+
+# Strip verbose/debug/info logging from release builds; warnings and errors stay for diagnostics.
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}
