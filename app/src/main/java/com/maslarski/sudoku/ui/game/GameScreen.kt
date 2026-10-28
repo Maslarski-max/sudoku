@@ -17,19 +17,28 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
@@ -52,6 +61,7 @@ import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -72,9 +82,11 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -199,39 +211,88 @@ fun GameScreen(
         }
         val boardGame = remember(game.cells, game.puzzle, game.iconMode) { game }
 
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        BoxWithConstraints(
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp),
         ) {
-            StatusRow(game = game, state = state)
-
-            SudokuBoard(
-                game = boardGame,
-                selectedIndex = state.selectedIndex,
-                activeHint = state.activeHint,
-                candidateMasks = candidateMasks,
-                transform = transform,
-                onCellTap = viewModel::selectCell,
-            )
-
-            ActionRow(
-                state = state,
-                onUndo = viewModel::undo,
-                onRedo = viewModel::redo,
-                onErase = viewModel::erase,
-                onToggleNotes = viewModel::toggleNotesMode,
-                onToggleCandidates = viewModel::toggleCandidates,
-                onHint = viewModel::requestHint,
-            )
-
-            NumberPad(
-                gridSize = game.gridSize,
-                variant = game.variant,
-                iconMode = game.iconMode,
-                enabled = !state.isPaused && !game.isComplete,
-                onNumber = viewModel::enterNumber,
-                modifier = Modifier.weight(1f, fill = false),
-            )
+            val isLandscape = maxWidth > maxHeight
+            if (!isLandscape) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    StatusRow(game = game, state = state)
+                    Box(
+                        Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
+                        BoxWithConstraints(Modifier.fillMaxSize()) {
+                            SudokuBoard(
+                                game = boardGame,
+                                selectedIndex = state.selectedIndex,
+                                activeHint = state.activeHint,
+                                candidateMasks = candidateMasks,
+                                transform = transform,
+                                onCellTap = viewModel::selectCell,
+                                modifier = Modifier.size(minOf(maxWidth, maxHeight)),
+                            )
+                        }
+                    }
+                    ActionRow(
+                        state = state,
+                        onUndo = viewModel::undo,
+                        onRedo = viewModel::redo,
+                        onErase = viewModel::erase,
+                        onToggleNotes = viewModel::toggleNotesMode,
+                        onToggleCandidates = viewModel::toggleCandidates,
+                        onHint = viewModel::requestHint,
+                    )
+                    NumberPad(
+                        gridSize = game.gridSize,
+                        variant = game.variant,
+                        iconMode = game.iconMode,
+                        enabled = !state.isPaused && !game.isComplete,
+                        onNumber = viewModel::enterNumber,
+                    )
+                }
+            } else {
+                val boardSize = minOf(maxHeight, maxWidth * 0.6f)
+                Row(
+                    Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    SudokuBoard(
+                        game = boardGame,
+                        selectedIndex = state.selectedIndex,
+                        activeHint = state.activeHint,
+                        candidateMasks = candidateMasks,
+                        transform = transform,
+                        onCellTap = viewModel::selectCell,
+                        modifier = Modifier.size(boardSize),
+                    )
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        StatusRow(game = game, state = state)
+                        ActionRow(
+                            state = state,
+                            onUndo = viewModel::undo,
+                            onRedo = viewModel::redo,
+                            onErase = viewModel::erase,
+                            onToggleNotes = viewModel::toggleNotesMode,
+                            onToggleCandidates = viewModel::toggleCandidates,
+                            onHint = viewModel::requestHint,
+                        )
+                        NumberPad(
+                            gridSize = game.gridSize,
+                            variant = game.variant,
+                            iconMode = game.iconMode,
+                            enabled = !state.isPaused && !game.isComplete,
+                            onNumber = viewModel::enterNumber,
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -289,6 +350,7 @@ fun GameScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StatusRow(game: GameState, state: GameUiState) {
     val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
@@ -310,14 +372,17 @@ private fun StatusRow(game: GameState, state: GameUiState) {
         color = comboColor,
         shadow = Shadow(color = glowColor, blurRadius = blurRadius),
     )
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(formatDuration(game.elapsedMillis), style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.width(16.dp))
-        Text(stringResource(R.string.game_mistakes, game.mistakes), style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.width(16.dp))
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(formatDuration(game.elapsedMillis), style = MaterialTheme.typography.titleLarge, maxLines = 1, softWrap = false)
+        Text(stringResource(R.string.game_mistakes, game.mistakes), style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
         AnimatedContent(
             targetState = state.comboActive,
-            modifier = Modifier.width(84.dp),
+            modifier = Modifier.widthIn(min = 84.dp),
             transitionSpec = {
                 (fadeIn() + scaleIn(initialScale = 0.9f)) togetherWith
                     (fadeOut() + scaleOut(targetScale = 0.9f))
@@ -325,29 +390,33 @@ private fun StatusRow(game: GameState, state: GameUiState) {
             label = "moves_combo",
         ) { comboActive ->
             if (comboActive) {
-                Text(stringResource(R.string.game_combo), style = comboStyle)
+                Text(stringResource(R.string.game_combo), style = comboStyle, maxLines = 1, softWrap = false)
             } else {
-                Text(stringResource(R.string.game_moves, game.moves), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.game_moves, game.moves), style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
             }
         }
-        Spacer(Modifier.width(16.dp))
         Text(
             stringResource(R.string.game_score, state.score?.total ?: 0),
             style = if (state.comboActive) comboStyle else MaterialTheme.typography.bodyMedium,
             color = if (state.comboActive) comboColor else MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            softWrap = false,
         )
-        Spacer(Modifier.weight(1f))
-        Icon(Icons.Default.Favorite, contentDescription = stringResource(R.string.game_lives), tint = MaterialTheme.colorScheme.error)
-        Spacer(Modifier.width(4.dp))
         val lives = state.lives
-        Text(
-            when {
-                lives == null -> ""
-                lives.unlimited -> stringResource(R.string.game_lives_unlimited)
-                else -> lives.count.toString()
-            },
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Favorite, contentDescription = stringResource(R.string.game_lives), tint = MaterialTheme.colorScheme.error)
+            Spacer(Modifier.width(4.dp))
+            Text(
+                when {
+                    lives == null -> ""
+                    lives.unlimited -> stringResource(R.string.game_lives_unlimited)
+                    else -> lives.count.toString()
+                },
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
     }
 }
 
@@ -364,16 +433,15 @@ private fun ActionRow(
     val game = state.game ?: return
     val enabled = !state.isPaused && !game.isComplete
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-        ActionButton(Icons.AutoMirrored.Filled.Undo, R.string.game_undo, enabled && game.undoStack.isNotEmpty(), onUndo)
-        ActionButton(Icons.AutoMirrored.Filled.Redo, R.string.game_redo, enabled && game.redoStack.isNotEmpty(), onRedo)
-        ActionButton(Icons.Default.Backspace, R.string.game_erase, enabled && state.selectedIndex >= 0, onErase)
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        ActionButton(Icons.AutoMirrored.Filled.Undo, R.string.game_undo, enabled && game.undoStack.isNotEmpty(), onUndo, modifier = Modifier.weight(1f))
+        ActionButton(Icons.AutoMirrored.Filled.Redo, R.string.game_redo, enabled && game.redoStack.isNotEmpty(), onRedo, modifier = Modifier.weight(1f))
+        ActionButton(Icons.Default.Backspace, R.string.game_erase, enabled && state.selectedIndex >= 0, onErase, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             FilledIconToggleButton(checked = state.notesMode, onCheckedChange = { onToggleNotes() }, enabled = enabled) {
                 Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.game_notes))
             }
-            Text(
+            ActionLabel(
                 stringResource(if (state.notesMode) R.string.game_notes_on else R.string.game_notes),
-                style = MaterialTheme.typography.labelSmall,
             )
         }
         val hintsRemaining = state.hintsRemaining
@@ -384,8 +452,9 @@ private fun ActionRow(
             onHint,
             labelText = if (hintsRemaining == null) stringResource(R.string.game_hint)
             else stringResource(R.string.game_hint_remaining, hintsRemaining),
+            modifier = Modifier.weight(1f),
         )
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             FilledIconToggleButton(
                 checked = state.showCandidates,
                 onCheckedChange = { onToggleCandidates() },
@@ -393,8 +462,8 @@ private fun ActionRow(
             ) {
                 Icon(Icons.Default.GridOn, contentDescription = stringResource(R.string.game_candidates))
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.game_candidates), style = MaterialTheme.typography.labelSmall)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                ActionLabel(stringResource(R.string.game_candidates), Modifier.weight(1f))
                 if (state.lives?.unlimited != true) {
                     Icon(
                         Icons.Default.Lock,
@@ -414,14 +483,31 @@ private fun ActionButton(
     label: Int,
     enabled: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     labelText: String = stringResource(label),
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         IconButton(onClick = onClick, enabled = enabled) {
             Icon(icon, contentDescription = stringResource(label))
         }
-        Text(labelText, style = MaterialTheme.typography.labelSmall)
+        ActionLabel(labelText, Modifier.fillMaxWidth())
     }
+}
+
+@Composable
+private fun ActionLabel(text: String, modifier: Modifier = Modifier) {
+    val style = MaterialTheme.typography.labelSmall.copy(
+        color = LocalContentColor.current,
+        textAlign = TextAlign.Center,
+    )
+    BasicText(
+        text = text,
+        modifier = modifier,
+        style = style,
+        maxLines = 1,
+        softWrap = false,
+        autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = style.fontSize),
+    )
 }
 
 @Composable
@@ -441,9 +527,11 @@ private fun NumberPad(
         GridSize.FIFTEEN -> 8
         GridSize.EIGHTEEN -> 9
     }
+    val rows = (gridSize.size + columns - 1) / columns
+    val keypadHeight = 44.dp * rows + 4.dp * (rows - 1) + 8.dp
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().height(keypadHeight),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         contentPadding = PaddingValues(bottom = 8.dp),
@@ -663,7 +751,13 @@ private fun CompletionDialog(
                 }
                 if (score.mistakePenalty > 0) {
                     Text(
-                        stringResource(R.string.complete_score_penalty, game.mistakes, ScoringRules.MISTAKE_PENALTY, score.mistakePenalty),
+                        pluralStringResource(
+                            R.plurals.complete_score_penalty,
+                            game.mistakes,
+                            game.mistakes,
+                            ScoringRules.MISTAKE_PENALTY,
+                            score.mistakePenalty,
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }

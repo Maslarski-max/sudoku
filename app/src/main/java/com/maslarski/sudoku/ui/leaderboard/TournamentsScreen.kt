@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -140,7 +142,7 @@ class TournamentsViewModel @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TournamentsScreen(
     onBack: () -> Unit,
@@ -170,16 +172,19 @@ fun TournamentsScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 FilterChip(
                     selected = state.board == TournamentBoard.ARENA,
                     onClick = { viewModel.select(TournamentBoard.ARENA) },
-                    label = { Text(stringResource(R.string.tournaments_arena)) },
+                    label = { Text(stringResource(R.string.tournaments_arena), maxLines = 1, softWrap = false) },
                 )
                 FilterChip(
                     selected = state.board == TournamentBoard.CHAMPIONSHIP,
                     onClick = { viewModel.select(TournamentBoard.CHAMPIONSHIP) },
-                    label = { Text(stringResource(R.string.tournaments_championship)) },
+                    label = { Text(stringResource(R.string.tournaments_championship), maxLines = 1, softWrap = false) },
                 )
             }
             Spacer(Modifier.height(8.dp))

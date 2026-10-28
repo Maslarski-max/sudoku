@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Sudoku"
-include(":app")
+include(":app", ":baselineprofile")
