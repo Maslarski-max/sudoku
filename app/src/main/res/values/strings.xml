@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Sudoku</string>
 
     <!-- Navigation -->
@@ -31,14 +31,14 @@
     <string name="home_continue">Continue</string>
     <string name="home_continue_description">%1$s · %2$s · %3$s</string>
     <string name="home_continue_description_variant">%1$s · %2$s · %3$s</string>
-    <string name="home_generating">Generating a %1$d×%1$d puzzle…</string>
+    <string name="home_generating" tools:ignore="PluralsCandidate">Generating a %1$d×%1$d puzzle…</string>
     <string name="home_generating_variant">Generating %1$s…</string>
     <string name="home_generating_hint">Large grids can take a few seconds.</string>
     <string name="home_ad_free" formatted="false">100% ad-free</string>
     <string name="home_saved_games">Saved games</string>
     <string name="home_no_saved_games">No games in progress</string>
     <string name="home_replace_saved_title">Replace saved game?</string>
-    <string name="home_replace_saved_message">You already have a %1$d×%1$d game in progress. Starting a new one will discard it and cost 1 Life.</string>
+    <string name="home_replace_saved_message" tools:ignore="PluralsCandidate">You already have a %1$d×%1$d game in progress. Starting a new one will discard it and cost 1 Life.</string>
     <string name="home_replace_variant_message">Your %1$s game is still in progress. Starting a new one will discard it and cost 1 Life.</string>
     <string name="home_replace_saved_confirm">Start new</string>
     <string name="home_replace_blocked_title">Not enough lives</string>
@@ -49,13 +49,13 @@
     <string name="home_icon_mode_supporting">Play with festive pictures instead of numbers</string>
     <string name="home_saved_holiday">Holiday</string>
 
-    <string name="grid_size_label">%1$d×%1$d</string>
+    <string name="grid_size_label" tools:ignore="PluralsCandidate">%1$d×%1$d</string>
     <string name="difficulty_easy">Easy</string>
     <string name="difficulty_medium">Medium</string>
     <string name="difficulty_hard">Hard</string>
 
     <!-- Game -->
-    <string name="game_title">%1$d×%1$d · %2$s</string>
+    <string name="game_title" tools:ignore="PluralsCandidate">%1$d×%1$d · %2$s</string>
     <string name="game_title_variant">%1$s · %2$s</string>
     <string name="game_title_daily">Daily Challenge · %1$s</string>
     <string name="game_mistakes">Mistakes: %1$d</string>
@@ -87,18 +87,18 @@
     <string name="game_quit">Quit to menu</string>
 
     <!-- Hints -->
-    <string name="hint_naked_single">Row %1$d, column %2$d can only be %3$d: every other number already appears in its row, column, or box.</string>
-    <string name="hint_hidden_single_row">%3$d must go in row %1$d, column %2$d: it is the only cell in row %1$d where %3$d still fits.</string>
-    <string name="hint_hidden_single_column">%3$d must go in row %1$d, column %2$d: it is the only cell in column %2$d where %3$d still fits.</string>
-    <string name="hint_hidden_single_box">%3$d must go in row %1$d, column %2$d: it is the only cell in its box where %3$d still fits.</string>
-    <string name="hint_fix_mistake">Row %1$d, column %2$d contains %3$d, which is incorrect. The right value is %4$d.</string>
-    <string name="hint_reveal">No simple logical step is available right now. Row %1$d, column %2$d is %3$d.</string>
-    <string name="hint_naked_single_icon">Row %1$d, column %2$d can only be %3$s: every other picture already appears in its row, column, or box.</string>
-    <string name="hint_hidden_single_row_icon">%3$s must go in row %1$d, column %2$d: it is the only cell in row %1$d where %3$s still fits.</string>
-    <string name="hint_hidden_single_column_icon">%3$s must go in row %1$d, column %2$d: it is the only cell in column %2$d where %3$s still fits.</string>
-    <string name="hint_hidden_single_box_icon">%3$s must go in row %1$d, column %2$d: it is the only cell in its box where %3$s still fits.</string>
-    <string name="hint_fix_mistake_icon">Row %1$d, column %2$d contains %3$s, which is incorrect. The right value is %4$s.</string>
-    <string name="hint_reveal_icon">No simple logical step is available right now. Row %1$d, column %2$d is %3$s.</string>
+    <string name="hint_naked_single" tools:ignore="PluralsCandidate">Row %1$d, column %2$d can only be %3$d: every other number already appears in its row, column, or box.</string>
+    <string name="hint_hidden_single_row" tools:ignore="PluralsCandidate">%3$d must go in row %1$d, column %2$d: it is the only cell in row %1$d where %3$d still fits.</string>
+    <string name="hint_hidden_single_column" tools:ignore="PluralsCandidate">%3$d must go in row %1$d, column %2$d: it is the only cell in column %2$d where %3$d still fits.</string>
+    <string name="hint_hidden_single_box" tools:ignore="PluralsCandidate">%3$d must go in row %1$d, column %2$d: it is the only cell in its box where %3$d still fits.</string>
+    <string name="hint_fix_mistake" tools:ignore="PluralsCandidate">Row %1$d, column %2$d contains %3$d, which is incorrect. The right value is %4$d.</string>
+    <string name="hint_reveal" tools:ignore="PluralsCandidate">No simple logical step is available right now. Row %1$d, column %2$d is %3$d.</string>
+    <string name="hint_naked_single_icon" tools:ignore="PluralsCandidate">Row %1$d, column %2$d can only be %3$s: every other picture already appears in its row, column, or box.</string>
+    <string name="hint_hidden_single_row_icon" tools:ignore="PluralsCandidate">%3$s must go in row %1$d, column %2$d: it is the only cell in row %1$d where %3$s still fits.</string>
+    <string name="hint_hidden_single_column_icon" tools:ignore="PluralsCandidate">%3$s must go in row %1$d, column %2$d: it is the only cell in column %2$d where %3$s still fits.</string>
+    <string name="hint_hidden_single_box_icon" tools:ignore="PluralsCandidate">%3$s must go in row %1$d, column %2$d: it is the only cell in its box where %3$s still fits.</string>
+    <string name="hint_fix_mistake_icon" tools:ignore="PluralsCandidate">Row %1$d, column %2$d contains %3$s, which is incorrect. The right value is %4$s.</string>
+    <string name="hint_reveal_icon" tools:ignore="PluralsCandidate">No simple logical step is available right now. Row %1$d, column %2$d is %3$s.</string>
     <string name="hint_none">The puzzle is already complete.</string>
 
     <!-- Lives -->
@@ -119,9 +119,12 @@
     <string name="complete_moves">Moves: %1$d</string>
     <string name="complete_mistakes">Mistakes: %1$d</string>
     <string name="complete_score_total">Score: %1$d</string>
-    <string name="complete_score_base">%1$d correct × %2$d pts = +%3$d</string>
+    <string name="complete_score_base" tools:ignore="PluralsCandidate">%1$d correct × %2$d pts = +%3$d</string>
     <string name="complete_score_combo">Combo bonus (×2): +%1$d</string>
-    <string name="complete_score_penalty">%1$d mistakes × %2$d pts = −%3$d</string>
+    <plurals name="complete_score_penalty">
+        <item quantity="one">%1$d mistake × %2$d pts = −%3$d</item>
+        <item quantity="other">%1$d mistakes × %2$d pts = −%3$d</item>
+    </plurals>
     <string name="complete_score_bonus">Time bonus: +%1$d (finished under %2$s)</string>
     <string name="complete_score_no_bonus">No time bonus (target %1$s)</string>
     <string name="complete_score_multiplier">%1$s multiplier: ×%2$.1f</string>
@@ -148,9 +151,15 @@
     <string name="leaderboard_error">Could not load the leaderboard. Check your connection.</string>
     <string name="leaderboard_retry">Retry</string>
     <string name="leaderboard_rank">#%1$d</string>
-    <string name="leaderboard_entry">%1$d pts · %2$s · %3$d moves</string>
+    <plurals name="leaderboard_entry">
+        <item quantity="one">%1$d pts · %2$s · %3$d move</item>
+        <item quantity="other">%1$d pts · %2$s · %3$d moves</item>
+    </plurals>
     <string name="leaderboard_you">You</string>
-    <string name="leaderboard_your_best">Your best: %1$d pts · %2$s · %3$d moves</string>
+    <plurals name="leaderboard_your_best">
+        <item quantity="one">Your best: %1$d pts · %2$s · %3$d move</item>
+        <item quantity="other">Your best: %1$d pts · %2$s · %3$d moves</item>
+    </plurals>
     <string name="leaderboard_no_best">You have not completed this category yet.</string>
 
     <!-- Tournaments -->
@@ -173,7 +182,7 @@
     <string name="trophy_room_title">Trophy Room</string>
     <string name="trophy_premium_banner">Unlock premium trophies with Unlimited</string>
     <string name="trophy_premium_unlock">Unlock Unlimited</string>
-    <string name="trophy_calendar_title">%1$s %2$d stamps</string>
+    <string name="trophy_calendar_title" tools:ignore="PluralsCandidate">%1$s %2$d stamps</string>
 
     <!-- Store -->
     <string name="store_title">Store</string>
@@ -226,7 +235,7 @@
     <string name="settings_rule_samurai">Samurai has five overlapping 9×9 grids. Shared cells must satisfy every overlapping row, column and box.</string>
     <string name="settings_rule_flower">Flower has five overlapping 9×9 grids. Shared cells must satisfy every overlapping row, column and box.</string>
     <string name="settings_rule_outside">Outside clues show digits among the first three cells from that edge; those digits do not appear in the remaining six cells.</string>
-    <string name="settings_grid_shape">Grid %1$d×%1$d: boxes are %2$d×%3$d.</string>
+    <string name="settings_grid_shape" tools:ignore="PluralsCandidate">Grid %1$d×%1$d: boxes are %2$d×%3$d.</string>
     <string name="settings_rule_enter">Select a cell and tap a number to fill it.</string>
     <string name="settings_rule_notes">Use Notes mode to add pencil marks.</string>
     <string name="settings_rule_candidates">Candidates shows every number that still fits in each empty cell.</string>

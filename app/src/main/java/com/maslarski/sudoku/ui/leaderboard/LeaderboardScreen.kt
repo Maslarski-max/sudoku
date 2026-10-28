@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -122,7 +125,7 @@ class LeaderboardViewModel @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LeaderboardScreen(
     onBack: () -> Unit,
@@ -164,12 +167,15 @@ fun LeaderboardScreen(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Difficulty.entries.forEach { d ->
                     FilterChip(
                         selected = state.category.difficulty == d,
                         onClick = { viewModel.select(difficulty = d) },
-                        label = { Text(difficultyLabel(d)) },
+                        label = { Text(difficultyLabel(d), maxLines = 1, softWrap = false) },
                     )
                 }
             }
@@ -177,7 +183,13 @@ fun LeaderboardScreen(
 
             val best = state.personalBest
             Text(
-                if (best != null) stringResource(R.string.leaderboard_your_best, best.points, formatDuration(best.timeMillis), best.moves)
+                if (best != null) pluralStringResource(
+                    R.plurals.leaderboard_your_best,
+                    best.moves,
+                    best.points,
+                    formatDuration(best.timeMillis),
+                    best.moves,
+                )
                 else stringResource(R.string.leaderboard_no_best),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -230,7 +242,13 @@ private fun EntryRow(entry: LeaderboardEntry) {
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
-                    stringResource(R.string.leaderboard_entry, entry.score.points, formatDuration(entry.score.timeMillis), entry.score.moves),
+                    pluralStringResource(
+                        R.plurals.leaderboard_entry,
+                        entry.score.moves,
+                        entry.score.points,
+                        formatDuration(entry.score.timeMillis),
+                        entry.score.moves,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -3,6 +3,8 @@ package com.maslarski.sudoku.ui.home
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,7 +60,7 @@ import com.maslarski.sudoku.ui.components.difficultyLabel
 import com.maslarski.sudoku.ui.components.formatDuration
 import com.maslarski.sudoku.ui.components.gridSizeLabel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onOpenGame: (Int) -> Unit,
@@ -202,12 +204,15 @@ fun HomeScreen(
             item {
                 Text(stringResource(R.string.home_difficulty), style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Difficulty.entries.forEach { d ->
                         FilterChip(
                             selected = state.difficulty == d,
                             onClick = { viewModel.selectDifficulty(d) },
-                            label = { Text(difficultyLabel(d)) },
+                            label = { Text(difficultyLabel(d), maxLines = 1, softWrap = false) },
                         )
                     }
                 }

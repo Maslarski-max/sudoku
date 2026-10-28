@@ -152,7 +152,11 @@ private fun MonthCalendar(month: YearMonth, stamps: Set<String>) {
     val locale = LocalConfiguration.current.locales[0]
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            stringResource(R.string.trophy_calendar_title, month.month.getDisplayName(TextStyle.FULL, locale), month.year),
+            stringResource(
+                R.string.trophy_calendar_title,
+                month.month.getDisplayName(TextStyle.FULL, locale),
+                month.year,
+            ),
             style = MaterialTheme.typography.titleMedium,
         )
         Row(Modifier.fillMaxWidth()) {
