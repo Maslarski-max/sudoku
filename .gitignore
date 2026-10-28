@@ -8,6 +8,7 @@
 .externalNativeBuild
 .cxx
 /app/build
+/baselineprofile/build
 *.apk
 *.aab
 /app/google-services.json
