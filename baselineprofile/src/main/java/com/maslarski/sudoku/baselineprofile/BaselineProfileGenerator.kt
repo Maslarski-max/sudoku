@@ -20,9 +20,20 @@ class BaselineProfileGenerator {
     val baselineProfileRule = BaselineProfileRule()
 
     @Test
-    fun generate() = baselineProfileRule.collect(
+    fun startup() = baselineProfileRule.collect(
         packageName = "com.maslarski.sudoku",
         includeInStartupProfile = true,
+    ) {
+        pressHome()
+        device.executeShellCommand("pm clear com.maslarski.sudoku")
+        startActivityAndWait()
+        device.requireText("home", "Pick a grid size and difficulty")
+    }
+
+    @Test
+    fun journey() = baselineProfileRule.collect(
+        packageName = "com.maslarski.sudoku",
+        includeInStartupProfile = false,
     ) {
         pressHome()
         device.executeShellCommand("pm clear com.maslarski.sudoku")

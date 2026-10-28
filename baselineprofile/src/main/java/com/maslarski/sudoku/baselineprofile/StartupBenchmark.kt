@@ -28,7 +28,11 @@ class StartupBenchmark {
             macrobenchmarkRule.apply(base, description)
         } else {
             object : Statement() {
-                override fun evaluate() = Unit
+                override fun evaluate() {
+                    throw org.junit.AssumptionViolatedException(
+                        "Startup benchmarks only run with -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark",
+                    )
+                }
             }
         }
     }
