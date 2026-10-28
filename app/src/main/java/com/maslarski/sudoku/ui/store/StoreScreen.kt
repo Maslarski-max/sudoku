@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -173,26 +174,54 @@ private fun ProductCard(
         ProductId.FIVE_LIVES -> R.string.store_five_lives_title to R.string.store_five_lives_description
         ProductId.UNLIMITED_LIVES -> R.string.store_unlimited_title to R.string.store_unlimited_description
     }
+    val useVerticalLayout = LocalDensity.current.fontScale >= 1.5f
     Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
+        if (useVerticalLayout) {
+            Column(
+                Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Text(stringResource(title), style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(4.dp))
                 Text(
                     stringResource(description),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Button(
+                    onClick = onBuy,
+                    enabled = enabled,
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text(
+                        when {
+                            owned -> stringResource(R.string.store_owned)
+                            product != null -> product.formattedPrice.ifBlank { stringResource(R.string.store_buy) }
+                            else -> stringResource(R.string.store_unavailable)
+                        },
+                    )
+                }
             }
-            Spacer(Modifier.width(12.dp))
-            Button(onClick = onBuy, enabled = enabled) {
-                Text(
-                    when {
-                        owned -> stringResource(R.string.store_owned)
-                        product != null -> product.formattedPrice.ifBlank { stringResource(R.string.store_buy) }
-                        else -> stringResource(R.string.store_unavailable)
-                    },
-                )
+        } else {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(title), style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        stringResource(description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Button(onClick = onBuy, enabled = enabled) {
+                    Text(
+                        when {
+                            owned -> stringResource(R.string.store_owned)
+                            product != null -> product.formattedPrice.ifBlank { stringResource(R.string.store_buy) }
+                            else -> stringResource(R.string.store_unavailable)
+                        },
+                    )
+                }
             }
         }
     }

@@ -36,6 +36,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -59,6 +61,7 @@ import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -83,6 +86,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -429,16 +433,15 @@ private fun ActionRow(
     val game = state.game ?: return
     val enabled = !state.isPaused && !game.isComplete
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-        ActionButton(Icons.AutoMirrored.Filled.Undo, R.string.game_undo, enabled && game.undoStack.isNotEmpty(), onUndo)
-        ActionButton(Icons.AutoMirrored.Filled.Redo, R.string.game_redo, enabled && game.redoStack.isNotEmpty(), onRedo)
-        ActionButton(Icons.Default.Backspace, R.string.game_erase, enabled && state.selectedIndex >= 0, onErase)
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        ActionButton(Icons.AutoMirrored.Filled.Undo, R.string.game_undo, enabled && game.undoStack.isNotEmpty(), onUndo, modifier = Modifier.weight(1f))
+        ActionButton(Icons.AutoMirrored.Filled.Redo, R.string.game_redo, enabled && game.redoStack.isNotEmpty(), onRedo, modifier = Modifier.weight(1f))
+        ActionButton(Icons.Default.Backspace, R.string.game_erase, enabled && state.selectedIndex >= 0, onErase, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             FilledIconToggleButton(checked = state.notesMode, onCheckedChange = { onToggleNotes() }, enabled = enabled) {
                 Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.game_notes))
             }
-            Text(
+            ActionLabel(
                 stringResource(if (state.notesMode) R.string.game_notes_on else R.string.game_notes),
-                style = MaterialTheme.typography.labelSmall,
             )
         }
         val hintsRemaining = state.hintsRemaining
@@ -449,8 +452,9 @@ private fun ActionRow(
             onHint,
             labelText = if (hintsRemaining == null) stringResource(R.string.game_hint)
             else stringResource(R.string.game_hint_remaining, hintsRemaining),
+            modifier = Modifier.weight(1f),
         )
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             FilledIconToggleButton(
                 checked = state.showCandidates,
                 onCheckedChange = { onToggleCandidates() },
@@ -458,8 +462,8 @@ private fun ActionRow(
             ) {
                 Icon(Icons.Default.GridOn, contentDescription = stringResource(R.string.game_candidates))
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.game_candidates), style = MaterialTheme.typography.labelSmall)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                ActionLabel(stringResource(R.string.game_candidates), Modifier.weight(1f))
                 if (state.lives?.unlimited != true) {
                     Icon(
                         Icons.Default.Lock,
@@ -479,14 +483,31 @@ private fun ActionButton(
     label: Int,
     enabled: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     labelText: String = stringResource(label),
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         IconButton(onClick = onClick, enabled = enabled) {
             Icon(icon, contentDescription = stringResource(label))
         }
-        Text(labelText, style = MaterialTheme.typography.labelSmall)
+        ActionLabel(labelText, Modifier.fillMaxWidth())
     }
+}
+
+@Composable
+private fun ActionLabel(text: String, modifier: Modifier = Modifier) {
+    val style = MaterialTheme.typography.labelSmall.copy(
+        color = LocalContentColor.current,
+        textAlign = TextAlign.Center,
+    )
+    BasicText(
+        text = text,
+        modifier = modifier,
+        style = style,
+        maxLines = 1,
+        softWrap = false,
+        autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = style.fontSize),
+    )
 }
 
 @Composable
